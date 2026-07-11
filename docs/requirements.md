@@ -22,3 +22,7 @@ application for easily keeping key=value notes.
 - Update value for that key
 - Add a new key=value pair
 - Add a new subtree (like "mkdir")
+- Rename a key=value pair or subtree
+- Move a key=value pair or subtree to another subtree
+- Copy a key=value pair or subtree to another subtree
+- Delete a key=value pair or subtree
