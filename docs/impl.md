@@ -1,5 +1,24 @@
 # Notes app implementation plan
 
+## 0. Current status
+
+As of the latest commit, the repository contains only documentation
+(`docs/requirements.md`, `docs/design.md`, `docs/impl.md`, `docs/questions.md`,
+`docs/remember.json`). A prior TypeScript vertical slice was built and then
+intentionally deleted (commit `3c93594`) so implementation could restart
+against this plan. No phase below has started.
+
+- [ ] Phase 0 — Project foundation and risk spikes
+- [ ] Phase 1 — Domain model and local tree browser
+- [ ] Phase 2 — Authentication, setup, and basic persistence
+- [ ] Phase 3 — Complete tree operations and trash
+- [ ] Phase 4 — Concurrency and resilient saving
+- [ ] Phase 5 — Search, history, restoration, and export
+- [ ] Phase 6 — PWA hardening, accessibility, and release
+
+Check off a phase only when every exit-criteria checkbox below it is checked,
+not when its UI merely appears to work (see closing note in section 6).
+
 ## 1. Delivery strategy
 
 Build the application as a series of usable vertical slices. Establish the
@@ -72,11 +91,11 @@ the relevant design assumption before building dependent features.
 
 Exit criteria:
 
-- lint, type-check, unit test, build, and a smoke test run in CI;
-- the app installs locally as a PWA and shows no note data while signed out;
-- a documented spike demonstrates private-repository read and conditional,
+- [ ] lint, type-check, unit test, build, and a smoke test run in CI;
+- [ ] the app installs locally as a PWA and shows no note data while signed out;
+- [ ] a documented spike demonstrates private-repository read and conditional,
   atomic write from the deployed origin; and
-- secrets and tokens are absent from source, build artifacts, URLs, and logs.
+- [ ] secrets and tokens are absent from source, build artifacts, URLs, and logs.
 
 ### Phase 1 — Domain model and local tree browser
 
@@ -97,11 +116,11 @@ later, but must not be the only way to reorder an array.
 
 Exit criteria:
 
-- every JSON value round-trips with deterministic formatting;
-- special keys and JSON Pointer escaping are tested;
-- duplicate keys differing only by case are rejected;
-- the tree browser and editor work at phone and desktop widths; and
-- domain tests cover success, invalid destination, replacement confirmation,
+- [ ] every JSON value round-trips with deterministic formatting;
+- [ ] special keys and JSON Pointer escaping are tested;
+- [ ] duplicate keys differing only by case are rejected;
+- [ ] the tree browser and editor work at phone and desktop widths; and
+- [ ] domain tests cover success, invalid destination, replacement confirmation,
   and non-mutating failure paths.
 
 ### Phase 2 — Authentication, setup, and basic persistence
@@ -122,11 +141,11 @@ messages from structured operation metadata.
 
 Exit criteria:
 
-- a new device can authorize, select the dedicated repository, and reopen it;
-- sign-out removes local authorization;
-- setup never overwrites an existing document or changes repository visibility;
-- all basic mutations create one valid commit each; and
-- connectivity, rate-limit, authorization, malformed-data, and write errors are
+- [ ] a new device can authorize, select the dedicated repository, and reopen it;
+- [ ] sign-out removes local authorization;
+- [ ] setup never overwrites an existing document or changes repository visibility;
+- [ ] all basic mutations create one valid commit each; and
+- [ ] connectivity, rate-limit, authorization, malformed-data, and write errors are
   distinct and preserve the user's unsaved input.
 
 ### Phase 3 — Complete tree operations and trash
@@ -143,10 +162,10 @@ clearly explain that Empty Trash is not secure Git-history erasure.
 
 Exit criteria:
 
-- all operations are atomic at the Git commit level;
-- recursive operations and cycle prevention have focused domain tests;
-- malformed trash data fails safely without damaging the active document; and
-- end-to-end tests cover delete, conflict on recovery, alternate destination,
+- [ ] all operations are atomic at the Git commit level;
+- [ ] recursive operations and cycle prevention have focused domain tests;
+- [ ] malformed trash data fails safely without damaging the active document; and
+- [ ] end-to-end tests cover delete, conflict on recovery, alternate destination,
   permanent deletion, and Empty Trash.
 
 ### Phase 4 — Concurrency and resilient saving
@@ -165,10 +184,10 @@ metadata if necessary for reliable identification, but never include note values
 
 Exit criteria:
 
-- two browser sessions cannot silently overwrite one another;
-- disjoint edits are reapplied successfully;
-- overlapping edits stop with recoverable local state; and
-- timeout-before-response and timeout-after-commit cases do not duplicate an
+- [ ] two browser sessions cannot silently overwrite one another;
+- [ ] disjoint edits are reapplied successfully;
+- [ ] overlapping edits stop with recoverable local state; and
+- [ ] timeout-before-response and timeout-after-commit cases do not duplicate an
   operation.
 
 ### Phase 5 — Search, history, restoration, and export
@@ -190,11 +209,11 @@ are excluded.
 
 Exit criteria:
 
-- search is case-insensitive and returns correct breadcrumbs;
-- history identifies revisions relevant to a selected path;
-- preview does not alter current state;
-- restoring one level leaves ancestors and siblings unchanged; and
-- exported JSON exactly represents the active tree and parses successfully.
+- [ ] search is case-insensitive and returns correct breadcrumbs;
+- [ ] history identifies revisions relevant to a selected path;
+- [ ] preview does not alter current state;
+- [ ] restoring one level leaves ancestors and siblings unchanged; and
+- [ ] exported JSON exactly represents the active tree and parses successfully.
 
 ### Phase 6 — PWA hardening, accessibility, and release
 
@@ -216,12 +235,12 @@ artifact.
 
 Exit criteria:
 
-- install, startup, upgrade, and rollback paths are tested;
-- offline mode shows the shell and a clear read/write-unavailable state without
+- [ ] install, startup, upgrade, and rollback paths are tested;
+- [ ] offline mode shows the shell and a clear read/write-unavailable state without
   exposing previously loaded notes after a fresh launch;
-- automated acceptance tests pass against a disposable private repository from
+- [ ] automated acceptance tests pass against a disposable private repository from
   two browser sessions; and
-- the release checklist verifies token redaction, repository scoping, no note
+- [ ] the release checklist verifies token redaction, repository scoping, no note
   data in deployed assets or diagnostics, and successful JSON export.
 
 ## 4. Testing approach
@@ -272,3 +291,44 @@ restoration, export, installability, and upgrade behavior.
 
 Do not call a milestone complete solely because its UI is present. Its exit
 criteria, automated tests, security checks, and failure recovery must all pass.
+
+## 7. Testing so far and next steps
+
+### How to test progress so far
+
+No application code exists yet, so there is nothing to run or test today.
+Until Phase 0 lands, verification means reviewing the documents rather than
+running anything:
+
+- Re-read `docs/requirements.md` and `docs/design.md` together and confirm
+  every requirement has a corresponding design section and phase above.
+- Confirm `docs/questions.md`'s open items are actually resolved in
+  `docs/design.md` section 15 ("Open questions"), which currently reads
+  "None currently."
+- Do not treat any GitHub integration claim in this plan as verified by
+  reasoning or by reading GitHub's docs alone. Phase 0's exit criteria exist
+  specifically because device flow, atomic multi-file commits, conflict
+  detection, and CORS behavior from the deployed origin must be proven against
+  a real disposable repository, not assumed.
+
+Once Phase 0 code exists, the first real checks are: lint, type-check, unit
+tests, a production build, and a CI smoke test, plus the four numbered spikes
+in Phase 0 run manually against a disposable private repository, with
+redacted request/response fixtures kept as evidence.
+
+### Immediate next steps
+
+1. Scaffold the Vite + TypeScript project and CI quality gates (Phase 0,
+   first paragraph): lint, type-check, unit tests, build, and a minimal
+   installable shell.
+2. Register a GitHub App and create a disposable private repository to run
+   the Phase 0 spikes against. **This requires your explicit approval before
+   creating or configuring either one.**
+3. Run and document the four Phase 0 spikes: device-flow authorization and
+   refresh without a client secret or proxy; an atomic multi-file commit via
+   the Git Data API; a rejected stale-writer commit distinguished from a
+   network/authorization failure; and required API calls succeeding under
+   CORS from the deployed Pages origin.
+4. Only after all four spikes pass and Phase 0's other exit criteria are met,
+   check off Phase 0 above, then proceed to Phase 1 (domain model and local
+   tree browser) as the next planned phase.

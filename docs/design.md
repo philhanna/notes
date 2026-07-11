@@ -36,14 +36,114 @@ performance in a phone browser is the practical size constraint.
 
 ## 3. System architecture
 
-The system has three parts:
+The system has three parts: a static web app that runs in the browser, a
+GitHub App that proves who the user is, and a private GitHub repository that
+stores the data. The two unfamiliar pieces are explained in detail below.
 
-1. **Static PWA** — responsive UI, tree editor, search index, GitHub repository
-   adapter, install manifest, and service worker.
-2. **GitHub App** — authenticates the user and grants narrowly scoped access to
-   the private data repository.
-3. **Private GitHub repository** — stores the current JSON document and its Git
-   revision history.
+### 3.1 Static PWA
+
+"Static" means the web app is just a fixed bundle of files — HTML, CSS, and
+JavaScript — generated once at build time and then served exactly as-is to
+every visitor. There is no server-side program running on a computer
+somewhere that generates a page per request, checks a database, or holds any
+state. This is different from most "web apps" people are used to (like Gmail
+or a bank site), which have a backend server doing work on every request.
+Here, the browser downloads the files once and then does all the work itself,
+talking directly to GitHub's API for data.
+
+This matters because it removes an entire category of things to build and
+secure: no server to host, patch, or pay for; no server-side database; no
+server-side secret to leak. The tradeoff is that anything the app needs to do
+— rendering the tree, validating input, calling GitHub — has to happen in the
+user's browser using JavaScript.
+
+"PWA" stands for Progressive Web App, explained fully in section 4; in short,
+it is a website that a browser can also "install" so it behaves like a
+regular app (its own icon, its own window, no address bar). The static PWA
+bundle contains several distinct pieces of code, each solving a different
+problem:
+
+- **Responsive UI** — the visual layout (tree browser, editor screens,
+  buttons) built so it rearranges itself to fit a small phone screen or a
+  wide desktop window, rather than having separate phone and desktop
+  versions.
+- **Tree editor** — the part of the UI that lets the user browse into
+  objects/arrays and create, edit, rename, move, or delete values, similar to
+  a simple file manager but for JSON instead of files.
+- **Search index** — a data structure built in memory, after the JSON
+  document is loaded, that lets the app answer "which keys/values contain
+  this text" instantly by scanning an in-memory structure instead of asking
+  GitHub every time the user types a search character.
+- **GitHub repository adapter** — a layer of code whose only job is
+  translating what the app wants to do ("save this document", "read this
+  file's history") into the specific HTTP calls GitHub's API requires. This
+  keeps the rest of the app's code from needing to know GitHub API details
+  directly, which also makes it possible to test the app against a fake
+  in-memory repository instead of the real GitHub API (see `docs/impl.md`).
+- **Install manifest** — a small JSON file (conventionally `manifest.json`)
+  that tells the browser the app's name, icon, and colors, so "Install app"
+  or "Add to Home screen" works and produces a proper-looking icon rather
+  than a generic browser bookmark.
+- **Service worker** — a special JavaScript file the browser runs in the
+  background, separately from the page itself, that can intercept network
+  requests before they leave the browser. It is what makes installed web
+  apps able to start up instantly and, if configured to, work offline. In
+  this design the service worker is deliberately limited to caching only the
+  unchanging application shell (the HTML/CSS/JS files) — never GitHub API
+  responses, tokens, or note content — so an attacker who gets access to a
+  device's browser cache cannot recover notes from it (see section 13).
+
+### 3.2 GitHub App
+
+A **GitHub App** is a type of integration you register once with GitHub
+(as a developer) that other GitHub accounts — here, just your own — can then
+"install" onto specific repositories they choose. It is GitHub's recommended
+way for a third-party program to access a user's repositories without ever
+handling that user's actual GitHub password, and without being handed
+blanket access to everything the user owns.
+
+This is different from two simpler alternatives you may have used before:
+
+- A **personal access token (PAT)** is a long-lived password-like string you
+  generate manually in your own GitHub account settings and paste into a
+  tool's configuration. It is tied directly to your account, is easy to
+  over-scope (grant more access than needed) or forget about, and if it
+  leaks, the leaker has whatever access it was granted for as long as it
+  remains valid.
+- An **OAuth App** (GitHub's older integration type) authenticates as a
+  user but its permission model is coarser and it needs a client secret for
+  some flows, which is awkward for an app with no server to keep that secret
+  on.
+
+A GitHub App instead has its own separate identity, declares in advance
+exactly which permissions it will ever ask for (here, just repository
+**Contents: Read and write** — nothing about issues, actions, admin
+settings, or any other repository), and is explicitly installed by the user
+onto **only select repositories** — in this design, just the one private
+notes repository, not "all repositories" or every repo the user owns. Even
+if the app's client ID became known to someone else, they could not use it
+to access your other repositories, because the installation itself is what
+grants repository access, and only you can create that installation.
+
+"Authenticates the user" means proving, to GitHub's servers, that a request
+is really coming from you and that you have approved this specific app
+having this specific access — without the app ever seeing or storing your
+GitHub password. The mechanism used here is the **OAuth device flow**
+(detailed in section 8): the app shows a short code, you open a GitHub page
+in any browser (including on another device) and enter it, and GitHub then
+hands the app a token scoped to exactly what the installation allows. Because
+this is a browser-only app with no server, device flow matters specifically
+because it does not require a **client secret** — a second, private
+credential that would normally have to live somewhere safe, which a static,
+publicly-downloadable bundle of JavaScript cannot provide (anyone could view
+it in the browser's developer tools).
+
+### 3.3 Private GitHub repository
+
+The third part is an ordinary private Git repository you create on GitHub.
+It stores the current JSON document and, because Git keeps every past
+version of every commit, it automatically stores the full revision history
+too — there is no separate history database to build or maintain.
 
 GitHub Pages can host the static PWA. Its source and deployed JavaScript may be
 public because they contain neither notes nor secret credentials. A private
