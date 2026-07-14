@@ -50,19 +50,6 @@ export function Harness() {
           />
           <h1>Notes</h1>
         </header>
-        <nav className="app-actions" aria-label="Note actions">
-          {view !== "search" && (
-            <button type="button" onClick={() => setView("search")}>
-              Search
-            </button>
-          )}
-          {view !== "trash" && (
-            <button type="button" onClick={() => setView("trash")}>
-              Trash ({documentState.trash.records.length})
-            </button>
-          )}
-          <ExportButton document={documentState.document} />
-        </nav>
         {view === "trash" && (
           <TrashView
             document={documentState.document}
@@ -81,6 +68,19 @@ export function Harness() {
           />
         )}
         {view === "tree" && <TreeBrowser state={documentState} />}
+        <nav className="app-actions" aria-label="Note actions">
+          {view !== "search" && (
+            <button type="button" onClick={() => setView("search")}>
+              Search
+            </button>
+          )}
+          {view !== "trash" && (
+            <button type="button" onClick={() => setView("trash")}>
+              Trash ({documentState.trash.records.length})
+            </button>
+          )}
+          <ExportButton document={documentState.document} />
+        </nav>
       </main>
     </>
   );

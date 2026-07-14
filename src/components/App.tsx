@@ -180,22 +180,6 @@ function ReadyApp({
   const [view, setView] = useState<"tree" | "trash" | "search">("tree");
   return (
     <>
-      <nav className="app-actions" aria-label="Note actions">
-        <button type="button" onClick={onSignOut}>
-          Sign out
-        </button>
-        {view !== "search" && (
-          <button type="button" onClick={() => setView("search")}>
-            Search
-          </button>
-        )}
-        {view !== "trash" && (
-          <button type="button" onClick={() => setView("trash")}>
-            Trash ({documentState.trash.records.length})
-          </button>
-        )}
-        <ExportButton document={documentState.document} />
-      </nav>
       {view === "trash" && (
         <TrashView
           document={documentState.document}
@@ -214,6 +198,22 @@ function ReadyApp({
         />
       )}
       {view === "tree" && <TreeBrowser state={documentState} />}
+      <nav className="app-actions" aria-label="Note actions">
+        <button type="button" onClick={onSignOut}>
+          Sign out
+        </button>
+        {view !== "search" && (
+          <button type="button" onClick={() => setView("search")}>
+            Search
+          </button>
+        )}
+        {view !== "trash" && (
+          <button type="button" onClick={() => setView("trash")}>
+            Trash ({documentState.trash.records.length})
+          </button>
+        )}
+        <ExportButton document={documentState.document} />
+      </nav>
     </>
   );
 }
