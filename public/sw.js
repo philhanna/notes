@@ -1,6 +1,6 @@
 // Caches only the static application shell. Never cache GitHub API
 // responses, tokens, or note content — see docs/design.md section 3.1.
-const SHELL_CACHE = "notes-shell-v2";
+const SHELL_CACHE = "notes-shell-v3";
 
 // Derived from this file's own URL rather than hardcoded, so it stays
 // correct under whatever base path the app is deployed at (e.g. "/notes/"
@@ -51,6 +51,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Documents are network-first so a returning online visit discovers the
+  // latest content-hashed CSS/JS bundle instead of remaining pinned to the
+  // index document from the first install. Static metadata can remain
+  // cache-first.
+  if (request.mode === "navigate" && url.pathname.startsWith(BASE_PATH)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok && url.pathname === BASE_PATH) {
+            void caches
+              .open(SHELL_CACHE)
+              .then((cache) => cache.put(BASE_PATH, response.clone()));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(BASE_PATH).then((cached) => cached ?? fetch(request)),
+        ),
+    );
+    return;
+  }
+
   if (SHELL_URLS.includes(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => cached ?? fetch(request)),
@@ -75,13 +97,5 @@ self.addEventListener("fetch", (event) => {
       }),
     );
     return;
-  }
-
-  if (request.mode === "navigate" && url.pathname.startsWith(BASE_PATH)) {
-    event.respondWith(
-      fetch(request).catch(() =>
-        caches.match(BASE_PATH).then((cached) => cached ?? fetch(request)),
-      ),
-    );
   }
 });

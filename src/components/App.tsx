@@ -135,7 +135,16 @@ export function App() {
         Skip to content
       </a>
       <main id="main-content">
-        <h1>Notes</h1>
+        <header className="app-header">
+          <img
+            className="app-header__icon"
+            src={`${import.meta.env.BASE_URL}nature-herb.png`}
+            alt=""
+            width="60"
+            height="60"
+          />
+          <h1>Notes</h1>
+        </header>
         {!isOnline && (
           <p className="status-banner status-banner--offline" role="status">
             You&rsquo;re offline. Sign-in and saving need an internet
@@ -171,20 +180,22 @@ function ReadyApp({
   const [view, setView] = useState<"tree" | "trash" | "search">("tree");
   return (
     <>
-      <button type="button" onClick={onSignOut}>
-        Sign out
-      </button>
-      {view !== "search" && (
-        <button type="button" onClick={() => setView("search")}>
-          Search
+      <nav className="app-actions" aria-label="Note actions">
+        <button type="button" onClick={onSignOut}>
+          Sign out
         </button>
-      )}
-      {view !== "trash" && (
-        <button type="button" onClick={() => setView("trash")}>
-          Trash ({documentState.trash.records.length})
-        </button>
-      )}
-      <ExportButton document={documentState.document} />
+        {view !== "search" && (
+          <button type="button" onClick={() => setView("search")}>
+            Search
+          </button>
+        )}
+        {view !== "trash" && (
+          <button type="button" onClick={() => setView("trash")}>
+            Trash ({documentState.trash.records.length})
+          </button>
+        )}
+        <ExportButton document={documentState.document} />
+      </nav>
       {view === "trash" && (
         <TrashView
           document={documentState.document}

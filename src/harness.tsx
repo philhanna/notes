@@ -40,18 +40,29 @@ export function Harness() {
         Skip to content
       </a>
       <main id="main-content">
-        <h1>Notes</h1>
-        {view !== "search" && (
-          <button type="button" onClick={() => setView("search")}>
-            Search
-          </button>
-        )}
-        {view !== "trash" && (
-          <button type="button" onClick={() => setView("trash")}>
-            Trash ({documentState.trash.records.length})
-          </button>
-        )}
-        <ExportButton document={documentState.document} />
+        <header className="app-header">
+          <img
+            className="app-header__icon"
+            src={`${import.meta.env.BASE_URL}nature-herb.png`}
+            alt=""
+            width="60"
+            height="60"
+          />
+          <h1>Notes</h1>
+        </header>
+        <nav className="app-actions" aria-label="Note actions">
+          {view !== "search" && (
+            <button type="button" onClick={() => setView("search")}>
+              Search
+            </button>
+          )}
+          {view !== "trash" && (
+            <button type="button" onClick={() => setView("trash")}>
+              Trash ({documentState.trash.records.length})
+            </button>
+          )}
+          <ExportButton document={documentState.document} />
+        </nav>
         {view === "trash" && (
           <TrashView
             document={documentState.document}

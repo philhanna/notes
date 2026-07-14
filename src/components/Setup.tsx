@@ -71,21 +71,25 @@ export function Setup({ auth, onReady }: SetupProps) {
   return (
     <form className="setup" onSubmit={(event) => void handleSubmit(event)}>
       <h2>Connect your notes repository</h2>
-      <label htmlFor="setup-owner">Owner</label>
-      <input
-        id="setup-owner"
-        value={owner}
-        onChange={(event) => setOwner(event.target.value)}
-        required
-      />
-      <label htmlFor="setup-repo">Repository</label>
-      <input
-        id="setup-repo"
-        value={repo}
-        onChange={(event) => setRepo(event.target.value)}
-        required
-      />
-      <button type="submit" disabled={checking}>
+      <div className="setup__field">
+        <label htmlFor="setup-owner">Owner</label>
+        <input
+          id="setup-owner"
+          value={owner}
+          onChange={(event) => setOwner(event.target.value)}
+          required
+        />
+      </div>
+      <div className="setup__field">
+        <label htmlFor="setup-repo">Repository</label>
+        <input
+          id="setup-repo"
+          value={repo}
+          onChange={(event) => setRepo(event.target.value)}
+          required
+        />
+      </div>
+      <button className="setup__submit" type="submit" disabled={checking}>
         {checking ? "Checking…" : "Connect"}
       </button>
       {error && (
