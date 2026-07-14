@@ -183,7 +183,7 @@ and also run automatically in `.github/workflows/ci.yml` on every change.
 
 - `manifest.json` — tells the browser the app's name, colors, and icon, so
   "Install app" (section 2c) works.
-- `icon.svg` — the home-screen icon.
+- `nature-herb.png` — the browser, home-screen, and installed-app icon.
 - `sw.js` — the **service worker**: a small script the browser keeps
   running in the background that lets the app start up instantly and show
   its basic shell even with a flaky connection. It deliberately never
