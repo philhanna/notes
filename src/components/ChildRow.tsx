@@ -1,0 +1,203 @@
+import { useState } from "react";
+import type { FormEvent } from "react";
+import type { ChildEntry, TreeError } from "../domain/tree.ts";
+import type { Result } from "../domain/result.ts";
+import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
+import { isContainer, isJsonArray, isJsonObject } from "../domain/types.ts";
+import { ValueEditor } from "./ValueEditor.tsx";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { describeTreeError } from "./errors.ts";
+
+interface ChildRowProps {
+  entry: ChildEntry;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onOpen: (path: Path) => void;
+  onRename: (oldKey: string, newKey: string) => Result<JsonObject, TreeError>;
+  onSetValue: (
+    path: Path,
+    value: JsonValue,
+    confirmReplace?: boolean,
+  ) => Result<JsonObject, TreeError>;
+  onMoveUp: () => Result<JsonObject, TreeError>;
+  onMoveDown: () => Result<JsonObject, TreeError>;
+}
+
+type Mode = "view" | "edit-value" | "rename";
+
+/** One row of the tree browser's child list (design.md 6.1). */
+export function ChildRow({
+  entry,
+  canMoveUp,
+  canMoveDown,
+  onOpen,
+  onRename,
+  onSetValue,
+  onMoveUp,
+  onMoveDown,
+}: ChildRowProps) {
+  const [mode, setMode] = useState<Mode>("view");
+  const [error, setError] = useState<string | null>(null);
+  const [pendingValue, setPendingValue] = useState<JsonValue | null>(null);
+
+  const label = entry.kind === "object-entry" ? entry.key : `[${entry.index}]`;
+  const container = isContainer(entry.value);
+
+  function resetToView() {
+    setMode("view");
+    setPendingValue(null);
+    setError(null);
+  }
+
+  function handleValueSubmit(value: JsonValue) {
+    const result = onSetValue(entry.path, value, false);
+    if (result.ok) {
+      resetToView();
+      return;
+    }
+    if (result.error.kind === "confirmation-required") {
+      setError(null);
+      setPendingValue(value);
+      return;
+    }
+    setError(describeTreeError(result.error));
+  }
+
+  function handleConfirmReplace() {
+    if (pendingValue === null) return;
+    const result = onSetValue(entry.path, pendingValue, true);
+    if (result.ok) {
+      resetToView();
+    } else {
+      setError(describeTreeError(result.error));
+      setPendingValue(null);
+    }
+  }
+
+  function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const newKey = String(
+      new FormData(event.currentTarget).get("newKey") ?? "",
+    );
+    const result = onRename(label, newKey);
+    if (result.ok) {
+      resetToView();
+    } else {
+      setError(describeTreeError(result.error));
+    }
+  }
+
+  function handleMoveUp() {
+    const result = onMoveUp();
+    if (!result.ok) setError(describeTreeError(result.error));
+  }
+
+  function handleMoveDown() {
+    const result = onMoveDown();
+    if (!result.ok) setError(describeTreeError(result.error));
+  }
+
+  return (
+    <li className="child-row">
+      <div className="child-row__main">
+        {container ? (
+          <button
+            type="button"
+            className="child-row__open"
+            onClick={() => onOpen(entry.path)}
+          >
+            {label} — {describeContainer(entry.value)}
+          </button>
+        ) : (
+          <span className="child-row__label">{label}</span>
+        )}
+        {!container && mode === "view" && (
+          <code className="child-row__preview">
+            {JSON.stringify(entry.value)}
+          </code>
+        )}
+      </div>
+
+      {mode === "view" && (
+        <div className="child-row__actions">
+          <button type="button" onClick={() => setMode("edit-value")}>
+            Edit
+          </button>
+          {entry.kind === "object-entry" && (
+            <button type="button" onClick={() => setMode("rename")}>
+              Rename
+            </button>
+          )}
+          {entry.kind === "array-element" && (
+            <>
+              <button
+                type="button"
+                onClick={handleMoveUp}
+                disabled={!canMoveUp}
+                aria-label={`Move ${label} up`}
+              >
+                Move up
+              </button>
+              <button
+                type="button"
+                onClick={handleMoveDown}
+                disabled={!canMoveDown}
+                aria-label={`Move ${label} down`}
+              >
+                Move down
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === "edit-value" && (
+        <>
+          <ValueEditor
+            idPrefix={`edit-${label}`}
+            initialText={JSON.stringify(entry.value)}
+            submitLabel="Save"
+            onSubmit={handleValueSubmit}
+            onCancel={resetToView}
+          />
+          {pendingValue !== null && (
+            <ConfirmDialog
+              message={`Replacing "${label}" changes its type and discards its current content. Continue?`}
+              confirmLabel="Replace"
+              onConfirm={handleConfirmReplace}
+              onCancel={() => setPendingValue(null)}
+            />
+          )}
+        </>
+      )}
+
+      {mode === "rename" && (
+        <form className="child-row__rename" onSubmit={handleRenameSubmit}>
+          <label htmlFor={`rename-${label}`}>New key</label>
+          <input
+            id={`rename-${label}`}
+            name="newKey"
+            defaultValue={label}
+            autoFocus
+          />
+          <button type="submit">Save</button>
+          <button type="button" onClick={resetToView}>
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {error && (
+        <p className="child-row__error" role="alert">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}
+
+function describeContainer(value: JsonValue): string {
+  if (isJsonArray(value)) return `array (${value.length})`;
+  if (isJsonObject(value)) return `object (${Object.keys(value).length})`;
+  return "";
+}

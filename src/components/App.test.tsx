@@ -3,11 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { App } from "./App";
 
 describe("App", () => {
-  it("shows the sign-in prompt", () => {
+  it("shows the tree browser with the fixture document's top-level keys", () => {
     render(<App />);
 
-    expect(
-      screen.getByText("Sign in with GitHub to open your notes."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByText("hardinfo")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^tips/ })).toBeInTheDocument();
   });
 });

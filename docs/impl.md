@@ -5,7 +5,7 @@
 A prior TypeScript vertical slice was built and then intentionally deleted
 (commit `3c93594`) so implementation could restart against this plan.
 
-Phase 0 is in progress. The Vite + React + TypeScript scaffold, quality gates
+Phase 0 is complete. The Vite + React + TypeScript scaffold, quality gates
 (lint, type-check, unit test, build), and minimal installable PWA shell exist
 and pass. A disposable private repository (`philhanna/notes-data`) and a
 GitHub App (device flow enabled, Contents: Read and write, installed only on
@@ -21,8 +21,28 @@ that real deployed origin against the real deployed relay — confirmed, see
 `spikes/fixtures/04-cors.json`. A secret/dependency scan over the scaffold
 found nothing to fix. All Phase 0 exit criteria are met.
 
+Phase 1 is complete. `src/domain/` is pure TypeScript with no React or
+GitHub dependency: `types.ts`/`keys.ts` define the JSON value model and
+case-insensitive key comparison, `path.ts` handles JSON Pointer encoding
+and decoding, `inference.ts` implements the value-input rules from
+`docs/design.md` section 6.2, `serialize.ts` handles deterministic
+serialization and validates the case-insensitive-uniqueness and non-empty
+key invariants from section 5.2, and `tree.ts` implements the Phase 1
+operations (navigate, list children, create an object entry or array
+element, rename a key, update a value with confirmation for a
+scalar/container or object/array boundary crossing, reorder an array) as
+pure functions returning a typed `Result`. `src/app/useDocument.ts` is a
+thin React hook applying those operations to local component state against
+fixture data (`src/app/fixtures/sampleDocument.ts` — fictional placeholder
+content, not real notes, since this repository is public per
+`docs/design.md` section 3.3). `src/components/` has a first local tree
+browser (breadcrumbs, child list, create/edit/rename forms, array
+move-up/move-down controls, and a confirmation dialog for type-changing
+replacements) with no GitHub or authentication wiring yet — that is Phase
+2. All Phase 1 exit criteria are met; see the testing notes in section 7.
+
 - [x] Phase 0 — Project foundation and risk spikes
-- [ ] Phase 1 — Domain model and local tree browser
+- [x] Phase 1 — Domain model and local tree browser
 - [ ] Phase 2 — Authentication, setup, and basic persistence
 - [ ] Phase 3 — Complete tree operations and trash
 - [ ] Phase 4 — Concurrency and resilient saving
@@ -171,11 +191,11 @@ later, but must not be the only way to reorder an array.
 
 Exit criteria:
 
-- [ ] every JSON value round-trips with deterministic formatting;
-- [ ] special keys and JSON Pointer escaping are tested;
-- [ ] duplicate keys differing only by case are rejected;
-- [ ] the tree browser and editor work at phone and desktop widths; and
-- [ ] domain tests cover success, invalid destination, replacement confirmation,
+- [x] every JSON value round-trips with deterministic formatting;
+- [x] special keys and JSON Pointer escaping are tested;
+- [x] duplicate keys differing only by case are rejected;
+- [x] the tree browser and editor work at phone and desktop widths; and
+- [x] domain tests cover success, invalid destination, replacement confirmation,
   and non-mutating failure paths.
 
 ### Phase 2 — Authentication, setup, and basic persistence
@@ -384,6 +404,29 @@ reasoning or by reading GitHub's docs alone — the CORS finding above is a
 direct example of why: it was not apparent from documentation and only
 surfaced by making the actual calls from a real browser.
 
+Phase 1's domain layer (`src/domain/`) and app-state hook
+(`src/app/useDocument.ts`) have unit and component tests: `npm test` runs
+74 tests covering path/pointer round-tripping and escaping, value
+inference (every row of `docs/design.md` section 6.2's table), document
+serialization and validation (root-must-be-object, empty-key and
+duplicate-key-by-case rejection, including nested), every Phase 1 tree
+operation (success, invalid destination, replacement confirmation, and
+that failures leave the document unchanged), the `useDocument` hook, and
+`TreeBrowser` component interaction (navigation, entry creation, a
+preserved-input validation error, rename, array reordering, and the
+confirm/cancel replacement flow). `npm run lint`, `npm run typecheck`, and
+`npm run build` all pass. The app was also manually driven in a real
+headless Chrome against `npm run dev` at both a 390px phone width and a
+1280px desktop width — screenshots confirmed breadcrumb navigation into
+`club_ids`, the value editor's live type-inference display, the
+confirmation dialog appearing when replacing a scalar with an object, and
+the tree reflecting the replacement afterward, with no console errors
+beyond two pre-existing unrelated 404s (`favicon.ico`, `icon.svg`) from
+the Phase 0 PWA scaffold. The fixture data in
+`src/app/fixtures/sampleDocument.ts` is fictional placeholder content, not
+real notes — see `docs/design.md` section 3.3 on this repository being
+public.
+
 ### Immediate next steps
 
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
@@ -398,5 +441,9 @@ surfaced by making the actual calls from a real browser.
    against the deployed relay and passed.
 5. ~~Run a secret/dependency scan over the current scaffold.~~ Done: `npm
    audit` clean, no credentials found in source, build artifacts, or logs.
-6. ~~Check off Phase 0.~~ Done — all exit criteria met. Next: Phase 1
-   (domain model and local tree browser).
+6. ~~Check off Phase 0.~~ Done — all exit criteria met.
+7. ~~Build the domain model and a local tree browser against fixture
+   data.~~ Done. Next: Phase 2 (authentication, setup, and basic
+   persistence) — wire the local tree browser to real GitHub read/write
+   through the auth relay and repository adapter, replacing the fixture
+   document.

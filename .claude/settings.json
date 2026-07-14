@@ -24,7 +24,15 @@
       "Bash(curl -s -D - -o /dev/null -X OPTIONS -H 'Origin: https://philhanna.github.io' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' https://github.com/login/oauth/access_token)",
       "Bash(curl -s -D - -o /dev/null -X POST -H 'Origin: https://philhanna.github.io' -H 'Accept: application/json' -H 'Content-Type: application/x-www-form-urlencoded' -H 'User-Agent: Mozilla/5.0 \\(spike-check\\)' --data client_id=Iv23liBOOsS7SnBaH9d2 https://github.com/login/device/code)",
       "Bash(curl -s -D - -o /dev/null -X POST -H 'Origin: https://philhanna.github.io' -H 'Accept: application/json' -H 'Content-Type: application/x-www-form-urlencoded' -H 'User-Agent: Mozilla/5.0 \\(spike-check\\)' --data 'client_id=Iv23liBOOsS7SnBaH9d2&device_code=x&grant_type=urn:ietf:params:oauth:grant-type:device_code' https://github.com/login/oauth/access_token)",
-      "Bash(npx --yes wrangler --version)"
+      "Bash(npx --yes wrangler --version)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(node -e \"const {chromium} = require\\('/home/saspeh/dev/notes/node_modules/playwright'\\) \")",
+      "Bash(npx --no-install playwright install --dry-run chromium)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node drive.mjs)"
     ]
   }
 }

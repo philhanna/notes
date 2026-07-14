@@ -1,0 +1,123 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  min-height: 2.75rem;
+}
+
+textarea {
+  min-height: 4.5rem;
+  width: 100%;
+}
+
+button {
+  padding: 0 0.75rem;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.breadcrumbs li:not(:last-child)::after {
+  content: "/";
+  margin-left: 0.25rem;
+}
+
+.child-list {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.child-row {
+  border: 1px solid light-dark(#ccc, #444);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.child-row__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.child-row__open {
+  text-align: left;
+}
+
+.child-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.child-row__error {
+  color: light-dark(#b00020, #ff6b6b);
+  margin: 0.5rem 0 0;
+}
+
+.value-editor,
+.child-row__rename,
+.create-entry-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.value-editor__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.confirm-dialog {
+  border: 2px solid light-dark(#b00020, #ff6b6b);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+@media (min-width: 40rem) {
+  main {
+    max-width: 48rem;
+  }
+}
