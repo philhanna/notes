@@ -46,6 +46,9 @@ describe("History and restore (design.md 10)", () => {
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
     await user.click(
+      within(hardinfoRow).getByLabelText("Actions for hardinfo"),
+    );
+    await user.click(
       within(hardinfoRow).getByRole("button", { name: "History" }),
     );
 

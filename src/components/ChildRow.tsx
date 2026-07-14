@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { DocumentState, MutationError } from "../app/useDocument.ts";
 import { encodePointer } from "../domain/path.ts";
@@ -61,6 +61,7 @@ export function ChildRow({
   const [pendingValue, setPendingValue] = useState<JsonValue | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const actionsRef = useRef<HTMLDetailsElement>(null);
 
   const label = entry.kind === "object-entry" ? entry.key : `[${entry.index}]`;
   const container = isContainer(entry.value);
@@ -69,6 +70,10 @@ export function ChildRow({
     setMode("view");
     setPendingValue(null);
     setError(null);
+  }
+
+  function closeActions() {
+    if (actionsRef.current) actionsRef.current.open = false;
   }
 
   async function handleValueSubmit(value: JsonValue) {
@@ -119,6 +124,7 @@ export function ChildRow({
   }
 
   async function handleMoveUp() {
+    closeActions();
     setSaving(true);
     const result = await onMoveUp();
     setSaving(false);
@@ -126,6 +132,7 @@ export function ChildRow({
   }
 
   async function handleMoveDown() {
+    closeActions();
     setSaving(true);
     const result = await onMoveDown();
     setSaving(false);
@@ -133,6 +140,7 @@ export function ChildRow({
   }
 
   function openRelocate(kind: "move" | "copy") {
+    closeActions();
     setRelocateKind(kind);
     setMode("relocate");
   }
@@ -186,74 +194,95 @@ export function ChildRow({
       </div>
 
       {mode === "view" && (
-        <div className="child-row__actions">
-          <button
-            type="button"
-            onClick={() => setMode("edit-value")}
-            disabled={saving}
+        <details className="child-row__actions" ref={actionsRef}>
+          <summary
+            className="child-row__actions-toggle"
+            aria-label={`Actions for ${label}`}
+            title={`Actions for ${label}`}
           >
-            Edit
-          </button>
-          {entry.kind === "object-entry" && (
+            ▾
+          </summary>
+          <div className="child-row__actions-menu">
             <button
               type="button"
-              onClick={() => setMode("rename")}
+              onClick={() => {
+                closeActions();
+                setMode("edit-value");
+              }}
               disabled={saving}
             >
-              Rename
+              Edit
             </button>
-          )}
-          {entry.kind === "array-element" && (
-            <>
+            {entry.kind === "object-entry" && (
               <button
                 type="button"
-                onClick={() => void handleMoveUp()}
-                disabled={saving || !canMoveUp}
-                aria-label={`Move ${label} up`}
+                onClick={() => {
+                  closeActions();
+                  setMode("rename");
+                }}
+                disabled={saving}
               >
-                Move up
+                Rename
               </button>
-              <button
-                type="button"
-                onClick={() => void handleMoveDown()}
-                disabled={saving || !canMoveDown}
-                aria-label={`Move ${label} down`}
-              >
-                Move down
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => openRelocate("move")}
-            disabled={saving}
-          >
-            Move to…
-          </button>
-          <button
-            type="button"
-            onClick={() => openRelocate("copy")}
-            disabled={saving}
-          >
-            Copy to…
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            disabled={saving}
-          >
-            Delete
-          </button>
-          {history && (
+            )}
+            {entry.kind === "array-element" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleMoveUp()}
+                  disabled={saving || !canMoveUp}
+                  aria-label={`Move ${label} up`}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleMoveDown()}
+                  disabled={saving || !canMoveDown}
+                  aria-label={`Move ${label} down`}
+                >
+                  Move down
+                </button>
+              </>
+            )}
             <button
               type="button"
-              onClick={() => setMode("history")}
+              onClick={() => openRelocate("move")}
               disabled={saving}
             >
-              History
+              Move to…
             </button>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => openRelocate("copy")}
+              disabled={saving}
+            >
+              Copy to…
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                closeActions();
+                setConfirmingDelete(true);
+              }}
+              disabled={saving}
+            >
+              Delete
+            </button>
+            {history && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeActions();
+                  setMode("history");
+                }}
+                disabled={saving}
+              >
+                History
+              </button>
+            )}
+          </div>
+        </details>
       )}
 
       {mode === "edit-value" && (

@@ -143,7 +143,7 @@ export function App() {
             width="60"
             height="60"
           />
-          <h1>Notes</h1>
+          <h1>My Notes</h1>
         </header>
         {!isOnline && (
           <p className="status-banner status-banner--offline" role="status">

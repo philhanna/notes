@@ -34,6 +34,7 @@ test("traps focus in the delete confirmation dialog and supports Escape to cance
   page,
 }) => {
   const hardinfoRow = page.locator("li.child-row", { hasText: "hardinfo" });
+  await hardinfoRow.getByLabel("Actions for hardinfo").click();
   await hardinfoRow.getByRole("button", { name: "Delete" }).click();
 
   const dialog = page.getByRole("alertdialog");

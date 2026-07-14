@@ -18,6 +18,14 @@ function Harness() {
   return <TreeBrowser state={state} />;
 }
 
+async function openActions(
+  user: ReturnType<typeof userEvent.setup>,
+  row: HTMLElement,
+  label: string,
+) {
+  await user.click(within(row).getByLabelText(`Actions for ${label}`));
+}
+
 describe("TreeBrowser", () => {
   it("navigates into a container via breadcrumbs and back", async () => {
     const user = userEvent.setup();
@@ -60,6 +68,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(
       within(hardinfoRow).getByRole("button", { name: "Rename" }),
     );
@@ -81,6 +90,8 @@ describe("TreeBrowser", () => {
       screen.getAllByText(/^[123]$/).map((el) => el.textContent);
     expect(values()).toEqual(["1", "2", "3"]);
 
+    const firstRow = screen.getByText("1").closest("li")!;
+    await openActions(user, firstRow, "[0]");
     await user.click(screen.getByRole("button", { name: "Move [0] down" }));
     expect(values()).toEqual(["2", "1", "3"]);
   });
@@ -90,6 +101,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(
       within(hardinfoRow).getByRole("button", { name: "Delete" }),
     );
@@ -106,6 +118,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(
       within(hardinfoRow).getByRole("button", { name: "Move to…" }),
     );
@@ -122,6 +135,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(
       within(hardinfoRow).getByRole("button", { name: "Copy to…" }),
     );
@@ -139,6 +153,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
     const textbox = within(hardinfoRow).getByLabelText("Value");
     fireEvent.change(textbox, { target: { value: '{"a":1}' } });
@@ -170,6 +185,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
     const textbox = within(hardinfoRow).getByLabelText("Value");
     await user.clear(textbox);
@@ -186,6 +202,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
     await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
 
     expect(within(hardinfoRow).getByLabelText("Value")).toHaveValue(
