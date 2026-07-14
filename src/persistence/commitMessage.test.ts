@@ -78,4 +78,14 @@ describe("describeOperation", () => {
   it("describes empty-trash without a path", () => {
     expect(describeOperation({ kind: "empty-trash" })).toBe("Empty trash");
   });
+
+  it("describes restore with the path and an abbreviated revision sha", () => {
+    expect(
+      describeOperation({
+        kind: "restore",
+        path: ["tips"],
+        revisionSha: "abc1234567890",
+      }),
+    ).toBe("Restore /tips to revision abc1234");
+  });
 });

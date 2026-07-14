@@ -101,7 +101,12 @@ interface TrashRowProps {
   permanentlyDeleteTrash: DocumentState["permanentlyDeleteTrash"];
 }
 
-function TrashRow({ record, document, recover, permanentlyDeleteTrash }: TrashRowProps) {
+function TrashRow({
+  record,
+  document,
+  recover,
+  permanentlyDeleteTrash,
+}: TrashRowProps) {
   const [needsDestination, setNeedsDestination] = useState(false);
   const [confirmingPermanent, setConfirmingPermanent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,7 +196,10 @@ function TrashRow({ record, document, recover, permanentlyDeleteTrash }: TrashRo
           className="trash-row__destination"
           onSubmit={(event) => void handleDestinationSubmit(event)}
         >
-          <p>&ldquo;{record.originalPath}&rdquo; is occupied. Choose another destination.</p>
+          <p>
+            &ldquo;{record.originalPath}&rdquo; is occupied. Choose another
+            destination.
+          </p>
           <label htmlFor={`trash-destination-${record.id}`}>
             Destination (JSON Pointer to the containing object or array)
           </label>

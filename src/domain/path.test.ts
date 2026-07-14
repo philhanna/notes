@@ -106,9 +106,9 @@ describe("adjustPathAfterRemoval", () => {
   });
 
   it("shifts a descendant of a later sibling", () => {
-    expect(
-      adjustPathAfterRemoval(["items", 1], ["items", 3, "child"]),
-    ).toEqual(["items", 2, "child"]);
+    expect(adjustPathAfterRemoval(["items", 1], ["items", 3, "child"])).toEqual(
+      ["items", 2, "child"],
+    );
   });
 
   it("leaves an earlier sibling unchanged", () => {

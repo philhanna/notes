@@ -27,6 +27,8 @@ import {
 import { decodePointerSegments } from "../domain/path.ts";
 import { anyPathOverlaps, changedPaths } from "../domain/diff.ts";
 import { affectedPaths } from "./concurrency.ts";
+import { findRelevantRevisions } from "./history.ts";
+import type { HistoryRevision } from "./history.ts";
 import type { Operation, Repository } from "../persistence/repository.ts";
 import type { PersistError } from "../persistence/types.ts";
 
@@ -99,6 +101,20 @@ export interface DocumentState {
     trashId: string,
   ) => Promise<Result<TrashDocument, MutationError>>;
   emptyTrash: () => Promise<Result<TrashDocument, MutationError>>;
+  /**
+   * The revisions relevant to `path` (design.md 10, 11), or `undefined`
+   * when there is no `Repository` to query — GitHub commit history has no
+   * local-fixture equivalent, unlike every other operation here.
+   */
+  history?:
+    | ((path: Path) => Promise<Result<HistoryRevision[], PersistError>>)
+    | undefined;
+  /** Replaces the value at `path` with an earlier revision's value (design.md 10). */
+  restore: (
+    path: Path,
+    value: JsonValue,
+    revisionSha: string,
+  ) => Promise<Result<JsonObject, MutationError>>;
 }
 
 /** Where `move`/`copy` placed a value, for the commit message only (design.md 9's "value-free"). */
@@ -436,6 +452,25 @@ export function useDocument(
     [asTrashResult],
   );
 
+  const history = persistence
+    ? (path: Path) => findRelevantRevisions(persistence.repository, path)
+    : undefined;
+
+  const restore = useCallback(
+    (path: Path, value: JsonValue, revisionSha: string) =>
+      asDocumentResult(
+        (doc, tr) => {
+          // confirmReplace: true — the user already chose this value from a
+          // history preview, so the usual type-change confirmation would be
+          // redundant (design.md 10 describes no separate restore confirmation).
+          const result = setValueAtPath(doc, path, value, true);
+          return result.ok ? ok({ document: result.value, trash: tr }) : result;
+        },
+        { kind: "restore", path, revisionSha },
+      ),
+    [asDocumentResult],
+  );
+
   return {
     document,
     trash,
@@ -453,5 +488,7 @@ export function useDocument(
     permanentlyDeleteTrash,
     emptyTrash: emptyTrashMutator,
     reorder,
+    history,
+    restore,
   };
 }

@@ -126,12 +126,59 @@ surface — it recombines primitives (conditional ref update, distinguishable
 Phase 2's real device-flow pass, so it was not re-verified against a real
 repository; see section 7 for what that means for confidence in this phase.
 
+Phase 5 is complete. `src/domain/search.ts` adds `buildSearchIndex` (a flat,
+pre-lowercased index of every object key, scalar value's textual form, and
+node breadcrumb) and `search` (case-insensitive substring matching against
+those three fields, per design.md 11 — including the fact that a match on an
+ancestor's breadcrumb also surfaces its descendants, since a breadcrumb by
+definition includes its whole ancestor chain). It only ever receives
+`document`, so trash and history have no way to appear in results.
+`src/persistence/repository.ts` adds `listDocumentHistory` (one page of
+commits that changed remember.json, newest first) and `loadDocumentAt` (the
+document as of an arbitrary commit) to the `Repository` port, plus a
+`restore` `Operation` kind. `githubRepository.ts` implements
+`listDocumentHistory` with GitHub's path-filtered commits listing
+(`GET .../commits?sha={branch}&path=remember.json`, which — like
+`git log -- path` — already excludes commits where remember.json's blob
+didn't actually change, so no extra client-side filtering is needed there)
+and `loadDocumentAt` by reusing the exact same commit → tree → blob Git Data
+API sequence `loadDocument` already uses, just against a non-head commit sha
+instead of the branch head. `inMemoryRepository.ts` mirrors both for tests,
+including the same "only where content actually changed" filtering.
+`src/app/history.ts`'s `findRelevantRevisions` narrows a page of file-level
+commits down to the ones where one specific JSON Pointer path actually
+changed (design.md 10's "comparing the selected JSON Pointer path across
+commits"): it fetches each candidate commit's document with bounded
+concurrency (design.md 11's "bound concurrent GitHub calls to avoid
+rate-limit bursts") and diffs each against its immediate predecessor in the
+page using `domain/diff.ts`'s existing `changedPaths`/`anyPathOverlaps` —
+reused rather than reimplemented. The oldest commit in a page has no fetched
+predecessor to compare against, so it is conservatively always reported as
+relevant. `src/app/useDocument.ts` exposes `history` (only when a
+`Repository` is present — there is no local-fixture equivalent of GitHub
+commit history) and `restore`, which replaces the value at a path with an
+earlier revision's value through the same `commitCore`/conflict-handling
+path every other mutator uses, tagged with a `{kind: "restore", path,
+revisionSha}` operation that `commitMessage.ts` renders as `Restore /tips to
+revision abc1234`, matching design.md 9's example exactly.
+`src/app/exportDocument.ts` serializes only `document` (never trash, history,
+credentials, or repository settings — there is no way to pass them in) with
+the same deterministic formatting as every commit, named
+`notes-export-<timestamp>.json`. `src/components/SearchView.tsx`,
+`HistoryPanel.tsx` (preview, compare-with-current, and a confirmed restore;
+opened per entry from `ChildRow.tsx`'s new History action, and for the
+current level from `TreeBrowser.tsx`, per design.md 6.1/10), and
+`ExportButton.tsx` (a plain download, triggered only on click) are wired into
+`App.tsx` alongside the existing tree/trash views. All Phase 5 exit criteria
+are met; see the testing notes in section 7, including one piece of new
+GitHub API surface this phase could not verify live.
+
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
 - [x] Phase 2 — Authentication, setup, and basic persistence
 - [x] Phase 3 — Complete tree operations and trash
 - [x] Phase 4 — Concurrency and resilient saving
-- [ ] Phase 5 — Search, history, restoration, and export
+- [x] Phase 5 — Search, history, restoration, and export
 - [ ] Phase 6 — PWA hardening, accessibility, and release
 
 Check off a phase only when every exit-criteria checkbox below it is checked,
@@ -407,11 +454,11 @@ are excluded.
 
 Exit criteria:
 
-- [ ] search is case-insensitive and returns correct breadcrumbs;
-- [ ] history identifies revisions relevant to a selected path;
-- [ ] preview does not alter current state;
-- [ ] restoring one level leaves ancestors and siblings unchanged; and
-- [ ] exported JSON exactly represents the active tree and parses successfully.
+- [x] search is case-insensitive and returns correct breadcrumbs;
+- [x] history identifies revisions relevant to a selected path;
+- [x] preview does not alter current state;
+- [x] restoring one level leaves ancestors and siblings unchanged; and
+- [x] exported JSON exactly represents the active tree and parses successfully.
 
 ### Phase 6 — PWA hardening, accessibility, and release
 
@@ -626,6 +673,44 @@ this mocked model, that would be a finding in the same spirit as the
 Phase 2 corrections above — not yet ruled out by direct testing the way
 those were.
 
+Phase 5's search and export are pure client-side code with no GitHub calls
+at all, so there is nothing to verify live for them beyond the unit and
+component tests already covering them (`domain/search.test.ts`,
+`app/exportDocument.test.ts`, `components/SearchView.test.tsx`,
+`components/ExportButton.test.tsx`). History and restore are more mixed.
+`loadDocumentAt` and `restore`'s save path reuse Git Data API call shapes
+(commit → tree → blob reads, and the same conditional commit `save` every
+other mutator already goes through) already proven live in Phase 0's
+spikes and Phase 2's real device-flow pass, so they inherit that
+confidence the same way Phase 4 argued its concurrency handling did.
+`listDocumentHistory`, however, calls GitHub's path-filtered commits
+listing (`GET /repos/{owner}/{repo}/commits?sha={branch}&path=remember.json`)
+— an endpoint no earlier phase used or exercised against a real
+repository. This session had no network access or credentials to run a
+live check against `philhanna/notes-data` the way `spikes/05-phase2-live-check.ts`
+did for Phase 2, so — per this document's own rule not to trust a GitHub
+integration claim from reasoning or documentation alone — that endpoint's
+real behavior (in particular, that it truly excludes commits where
+remember.json's content didn't change, the way `git log -- path` does,
+which `src/test/fakeGitGraph.ts` and `repository.contract.test.ts`'s stub
+were built to model) is confirmed only by GitHub's documented behavior and
+by content-addressed mocked-transport tests, not by a real call. Before
+trusting history in production, run a live check analogous to
+`spikes/05-phase2-live-check.ts` covering `listDocumentHistory` and
+`loadDocumentAt` against a repository with several remember.json-touching
+and remember.json-untouched commits, and compare its result against `git
+log --oneline -- remember.json` on that same repository. `npm test` now
+runs 297 tests, including `components/HistoryPanel.test.tsx`'s
+end-to-end-through-the-hook coverage of preview-without-mutating, a
+confirmed restore, and an untouched sibling, all driven through
+`inMemoryRepository` with real DOM interaction (Testing Library + jsdom);
+`npm run lint`, `npm run typecheck`, `npm run format`, and `npm run build`
+all pass. Unlike Phases 1 and 2, this phase was not additionally driven
+with a real headless browser against `npm run dev` — this session had
+neither a live GitHub token nor network access to set that up — so, beyond
+the jsdom-based component tests, its UI has not been visually confirmed to
+render and behave correctly in an actual browser.
+
 ### Immediate next steps
 
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
@@ -659,8 +744,17 @@ those were.
     Phase 3.~~ Done — all exit criteria met.
 11. ~~Implement the reload/diff/reapply-once conflict handling and the
     uncertain-ref-update head comparison; check off Phase 4.~~ Done — all
-    exit criteria met, on the mocked-test basis described just above. Next:
-    Phase 5 (search, history, restoration, and export) — build the
-    in-memory search index, add history retrieval and path-based
-    restoration bounded against rate-limit bursts, and implement active-tree
-    JSON export.
+    exit criteria met, on the mocked-test basis described just above.
+12. ~~Build the in-memory search index and query; add path-scoped history
+    retrieval (bounded, lazy) and restoration; implement active-tree JSON
+    export; check off Phase 5.~~ Done — all exit criteria met, on the basis
+    described just above (the new `listDocumentHistory` GitHub endpoint is
+    covered by mocked tests only, not yet a live check). Next: Phase 6 (PWA
+    hardening, accessibility, and release) — finalize the manifest, icons,
+    install/update behavior with in-progress-edit preservation, accessibility
+    and responsive testing (screen reader labels, focus management, keyboard-
+    only operation, reduced motion, contrast, touch targets) on real Android
+    Chrome and a Chromium-based desktop browser, and the GitHub Pages release
+    checklist (environment-specific config, CSP, dependency/secret scanning,
+    documented rollback). Before or during Phase 6, also run the live
+    `listDocumentHistory`/`loadDocumentAt` check described just above.

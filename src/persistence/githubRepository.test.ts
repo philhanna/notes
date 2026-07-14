@@ -569,3 +569,120 @@ describe("save", () => {
     });
   });
 });
+
+describe("listDocumentHistory", () => {
+  it("returns commits newest first, with message and date", async () => {
+    const graph = createFakeGraph({ hardinfo: "v1" });
+    installFetch(graph);
+    const repository = createGithubRepository(config, okToken);
+    const baseSha = graph.getHead()!;
+
+    const saved = await repository.save(
+      { document: { hardinfo: "v2" }, trash: { version: 1, records: [] } },
+      baseSha,
+      { kind: "set-value", path: ["hardinfo"] },
+    );
+    if (!saved.ok) throw new Error("expected save to succeed");
+
+    const history = await repository.listDocumentHistory();
+    expect(history.ok).toBe(true);
+    if (history.ok) {
+      expect(history.value[0]).toMatchObject({
+        sha: saved.value.sha,
+        message: "Set /hardinfo",
+      });
+      expect(typeof history.value[0]!.date).toBe("string");
+    }
+  });
+
+  it("excludes a commit that left remember.json's content unchanged", async () => {
+    const graph = createFakeGraph({ hardinfo: "v1" });
+    installFetch(graph);
+    const repository = createGithubRepository(config, okToken);
+    const baseSha = graph.getHead()!;
+
+    const trashOnly = await repository.save(
+      {
+        document: { hardinfo: "v1" },
+        trash: {
+          version: 1,
+          records: [
+            {
+              id: "t1",
+              deletedAt: "2026-07-14T00:00:00.000Z",
+              originalPath: "/gone",
+              type: "string",
+              value: "gone",
+            },
+          ],
+        },
+      },
+      baseSha,
+      { kind: "delete", path: ["gone"] },
+    );
+    if (!trashOnly.ok) throw new Error("expected save to succeed");
+
+    const history = await repository.listDocumentHistory();
+    expect(history.ok).toBe(true);
+    if (history.ok) {
+      expect(history.value.map((entry) => entry.sha)).not.toContain(
+        trashOnly.value.sha,
+      );
+    }
+  });
+
+  it("requests the given page", async () => {
+    const graph = createFakeGraph({ hardinfo: "v1" });
+    const fetchMock = installFetch(graph);
+    const repository = createGithubRepository(config, okToken);
+
+    await repository.listDocumentHistory(2);
+    const call = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes("/commits?"),
+    );
+    expect(call?.[0]).toContain("page=2");
+  });
+
+  it("reports malformed when the response body is not an array", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => fakeResponse(200, { not: "an array" })),
+    );
+    const repository = createGithubRepository(config, okToken);
+    expect(await repository.listDocumentHistory()).toEqual({
+      ok: false,
+      error: { kind: "malformed" },
+    });
+  });
+});
+
+describe("loadDocumentAt", () => {
+  it("reads the document as it existed at an earlier commit", async () => {
+    const graph = createFakeGraph({ hardinfo: "v1" });
+    installFetch(graph);
+    const repository = createGithubRepository(config, okToken);
+    const originalSha = graph.getHead()!;
+
+    await repository.save(
+      { document: { hardinfo: "v2" }, trash: { version: 1, records: [] } },
+      originalSha,
+      { kind: "set-value", path: ["hardinfo"] },
+    );
+
+    expect(await repository.loadDocumentAt(originalSha)).toEqual({
+      ok: true,
+      value: { hardinfo: "v1" },
+    });
+  });
+
+  it("reports not-found for a commit with no remember.json", async () => {
+    const graph = createFakeGraph(null);
+    installFetch(graph);
+    const repository = createGithubRepository(config, okToken);
+
+    expect(await repository.loadDocumentAt(graph.getHead()!)).toEqual({
+      ok: false,
+      error: { kind: "not-found" },
+    });
+  });
+});

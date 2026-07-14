@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { DocumentState, MutationError } from "../app/useDocument.ts";
 import { resolvePointer } from "../domain/path.ts";
 import { err } from "../domain/result.ts";
@@ -8,6 +9,7 @@ import { isJsonArray } from "../domain/types.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { ChildRow } from "./ChildRow.tsx";
 import { CreateEntryForm } from "./CreateEntryForm.tsx";
+import { HistoryPanel } from "./HistoryPanel.tsx";
 
 interface TreeBrowserProps {
   state: DocumentState;
@@ -28,7 +30,10 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     move,
     copy,
     deleteEntry,
+    history,
+    restore,
   } = state;
+  const [showHistory, setShowHistory] = useState(false);
 
   const current = getAtPath(document, currentPath);
   const isArray = isJsonArray(current);
@@ -52,7 +57,29 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
 
   return (
     <div className="tree-browser">
-      <Breadcrumbs path={currentPath} onNavigate={navigate} />
+      <div className="tree-browser__header">
+        <Breadcrumbs path={currentPath} onNavigate={navigate} />
+        {history && (
+          <button type="button" onClick={() => setShowHistory(true)}>
+            History for this level
+          </button>
+        )}
+      </div>
+
+      {showHistory && history && (
+        <HistoryPanel
+          path={currentPath}
+          label={
+            currentPath.length === 0
+              ? "Notes"
+              : String(currentPath[currentPath.length - 1])
+          }
+          currentValue={current}
+          history={history}
+          restore={restore}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       {children.length === 0 ? (
         <p className="tree-browser__empty">This level is empty.</p>
@@ -77,6 +104,8 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
                   relocate(kind, entry.path, destinationPointer, newKey)
                 }
                 onDelete={() => deleteEntry(entry.path)}
+                history={history}
+                restore={restore}
               />
             );
           })}

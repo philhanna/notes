@@ -25,5 +25,7 @@ export function describeOperation(operation: Operation): string {
       return `Permanently delete ${encodePointer(operation.path)}`;
     case "empty-trash":
       return "Empty trash";
+    case "restore":
+      return `Restore ${encodePointer(operation.path)} to revision ${operation.revisionSha.slice(0, 7)}`;
   }
 }

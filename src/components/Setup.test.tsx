@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { Setup } from "./Setup.tsx";
 import type { AuthState } from "../auth/useAuth.ts";
 import { loadRepoConfig } from "../auth/repoConfig.ts";
-import { createFakeGraph, fakeResponse, installFetch } from "../test/fakeGitGraph.ts";
+import {
+  createFakeGraph,
+  fakeResponse,
+  installFetch,
+} from "../test/fakeGitGraph.ts";
 
 function auth(): AuthState {
   return {

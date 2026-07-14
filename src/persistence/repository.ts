@@ -18,12 +18,21 @@ export type Operation =
   | { kind: "delete"; path: Path }
   | { kind: "recover"; path: Path; trashId: string }
   | { kind: "permanent-delete"; path: Path; trashId: string }
-  | { kind: "empty-trash" };
+  | { kind: "empty-trash" }
+  | { kind: "restore"; path: Path; revisionSha: string };
 
 export interface RepositoryCheck {
   private: boolean;
   writable: boolean;
   defaultBranch: string;
+}
+
+/** One commit that changed remember.json, newest first (design.md 9, 10). */
+export interface CommitInfo {
+  sha: string;
+  message: string;
+  /** ISO 8601, from the commit's author date. */
+  date: string;
 }
 
 /**
@@ -61,4 +70,15 @@ export interface Repository {
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>>;
+  /**
+   * One page of commits that changed remember.json, newest first
+   * (design.md 9's "list commits affecting the data ... files", 11's "fetch
+   * historical versions lazily"). `page` is 1-based; a short page (or an
+   * empty one) means there is nothing further back.
+   */
+  listDocumentHistory(
+    page?: number,
+  ): Promise<Result<CommitInfo[], PersistError>>;
+  /** The document as it existed at `sha` (design.md 10's preview/restoration). */
+  loadDocumentAt(sha: string): Promise<Result<JsonObject, PersistError>>;
 }

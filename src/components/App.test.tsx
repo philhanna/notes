@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App.tsx";
-import { createFakeGraph, fakeResponse, installFetch } from "../test/fakeGitGraph.ts";
+import {
+  createFakeGraph,
+  fakeResponse,
+  installFetch,
+} from "../test/fakeGitGraph.ts";
 
 const TOKEN_KEY = "notes/auth-token";
 const REPO_CONFIG_KEY = "notes/repo-config";
@@ -69,7 +73,9 @@ describe("App", () => {
     render(<App />);
     const hardinfoRow = (await screen.findByText("hardinfo")).closest("li")!;
 
-    await user.click(within(hardinfoRow).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(hardinfoRow).getByRole("button", { name: "Delete" }),
+    );
     const confirm = screen.getByRole("alertdialog");
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 

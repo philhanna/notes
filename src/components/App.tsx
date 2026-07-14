@@ -8,6 +8,8 @@ import type { TrashDocument } from "../domain/trash.ts";
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
+import { ExportButton } from "./ExportButton.tsx";
+import { SearchView } from "./SearchView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
 import { TreeBrowser } from "./TreeBrowser.tsx";
@@ -148,30 +150,42 @@ function ReadyApp({
     initialSha: state.sha,
     initialTrash: state.trash,
   });
-  const [showTrash, setShowTrash] = useState(false);
+  const [view, setView] = useState<"tree" | "trash" | "search">("tree");
   return (
     <main>
       <h1>Notes</h1>
       <button type="button" onClick={onSignOut}>
         Sign out
       </button>
-      {!showTrash && (
-        <button type="button" onClick={() => setShowTrash(true)}>
+      {view !== "search" && (
+        <button type="button" onClick={() => setView("search")}>
+          Search
+        </button>
+      )}
+      {view !== "trash" && (
+        <button type="button" onClick={() => setView("trash")}>
           Trash ({documentState.trash.records.length})
         </button>
       )}
-      {showTrash ? (
+      <ExportButton document={documentState.document} />
+      {view === "trash" && (
         <TrashView
           document={documentState.document}
           trash={documentState.trash}
           recover={documentState.recover}
           permanentlyDeleteTrash={documentState.permanentlyDeleteTrash}
           emptyTrash={documentState.emptyTrash}
-          onClose={() => setShowTrash(false)}
+          onClose={() => setView("tree")}
         />
-      ) : (
-        <TreeBrowser state={documentState} />
       )}
+      {view === "search" && (
+        <SearchView
+          document={documentState.document}
+          onNavigate={documentState.navigate}
+          onClose={() => setView("tree")}
+        />
+      )}
+      {view === "tree" && <TreeBrowser state={documentState} />}
     </main>
   );
 }

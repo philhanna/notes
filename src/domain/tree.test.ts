@@ -295,9 +295,7 @@ describe("removeEntry", () => {
     const result = removeEntry(doc, ["hardinfo"]);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.value).toBe(
-        "The ultimate system information viewer",
-      );
+      expect(result.value.value).toBe("The ultimate system information viewer");
       expect(getAtPath(result.value.document, ["hardinfo"])).toBeUndefined();
     }
     expect(doc).toEqual(sample());
@@ -453,13 +451,9 @@ describe("copy", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(() => JSON.stringify(result.value)).not.toThrow();
-      expect(getAtPath(result.value, [
-        "tips",
-        "bash",
-        "self-copy",
-        "bash",
-        "fc",
-      ])).toBe("Puts recent history in editor");
+      expect(
+        getAtPath(result.value, ["tips", "bash", "self-copy", "bash", "fc"]),
+      ).toBe("Puts recent history in editor");
     }
   });
 

@@ -96,7 +96,9 @@ describe("TrashView", () => {
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(/not secure erasure/);
 
-    await user.click(within(dialog).getByRole("button", { name: "Empty Trash" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Empty Trash" }),
+    );
 
     expect(screen.getByText("Trash is empty.")).toBeInTheDocument();
   });

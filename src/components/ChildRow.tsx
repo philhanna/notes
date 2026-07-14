@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import type { MutationError } from "../app/useDocument.ts";
+import type { DocumentState, MutationError } from "../app/useDocument.ts";
 import type { ChildEntry } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { isContainer, isJsonArray, isJsonObject } from "../domain/types.ts";
 import { ValueEditor } from "./ValueEditor.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { HistoryPanel } from "./HistoryPanel.tsx";
 import { describeError } from "./errors.ts";
 
 interface ChildRowProps {
@@ -31,9 +32,11 @@ interface ChildRowProps {
     newKey: string | undefined,
   ) => Promise<Result<JsonObject, MutationError>>;
   onDelete: () => Promise<Result<JsonObject, MutationError>>;
+  history?: DocumentState["history"];
+  restore: DocumentState["restore"];
 }
 
-type Mode = "view" | "edit-value" | "rename" | "relocate";
+type Mode = "view" | "edit-value" | "rename" | "relocate" | "history";
 
 /** One row of the tree browser's child list (design.md 6.1). */
 export function ChildRow({
@@ -47,6 +50,8 @@ export function ChildRow({
   onMoveDown,
   onRelocate,
   onDelete,
+  history,
+  restore,
 }: ChildRowProps) {
   const [mode, setMode] = useState<Mode>("view");
   const [relocateKind, setRelocateKind] = useState<"move" | "copy">("move");
@@ -237,6 +242,15 @@ export function ChildRow({
           >
             Delete
           </button>
+          {history && (
+            <button
+              type="button"
+              onClick={() => setMode("history")}
+              disabled={saving}
+            >
+              History
+            </button>
+          )}
         </div>
       )}
 
@@ -295,7 +309,9 @@ export function ChildRow({
             placeholder="/tips"
             autoFocus
           />
-          <label htmlFor={`new-key-${label}`}>New key (object destinations only)</label>
+          <label htmlFor={`new-key-${label}`}>
+            New key (object destinations only)
+          </label>
           <input id={`new-key-${label}`} name="newKey" placeholder={label} />
           <button type="submit" disabled={saving}>
             {relocateKind === "move" ? "Move" : "Copy"}
@@ -304,6 +320,17 @@ export function ChildRow({
             Cancel
           </button>
         </form>
+      )}
+
+      {mode === "history" && history && (
+        <HistoryPanel
+          path={entry.path}
+          label={label}
+          currentValue={entry.value}
+          history={history}
+          restore={restore}
+          onClose={resetToView}
+        />
       )}
 
       {confirmingDelete && (

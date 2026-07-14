@@ -100,10 +100,7 @@ export function isPathWithinOrEqual(ancestor: Path, candidate: Path): boolean {
  * (object removals, unrelated paths, deeper segments under a shifted
  * index) keeps its own segments unchanged apart from that one entry.
  */
-export function adjustPathAfterRemoval(
-  removedPath: Path,
-  path: Path,
-): Path {
+export function adjustPathAfterRemoval(removedPath: Path, path: Path): Path {
   const parentLength = removedPath.length - 1;
   if (parentLength < 0) return path;
   if (path.length <= parentLength) return path;

@@ -90,7 +90,9 @@ describe("TreeBrowser", () => {
     render(<Harness />);
 
     const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await user.click(within(hardinfoRow).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(hardinfoRow).getByRole("button", { name: "Delete" }),
+    );
     const dialog = screen.getByRole("alertdialog");
     expect(dialog).toHaveTextContent(/moved to trash/);
 
@@ -107,10 +109,7 @@ describe("TreeBrowser", () => {
     await user.click(
       within(hardinfoRow).getByRole("button", { name: "Move to…" }),
     );
-    await user.type(
-      screen.getByLabelText(/Destination/),
-      "/tips",
-    );
+    await user.type(screen.getByLabelText(/Destination/), "/tips");
     await user.click(screen.getByRole("button", { name: "Move" }));
 
     expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();

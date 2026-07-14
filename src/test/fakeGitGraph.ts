@@ -1,5 +1,8 @@
 import { vi } from "vitest";
+import { serializeTrash } from "../domain/trash.ts";
 import type { TrashDocument } from "../domain/trash.ts";
+import { serializeDocument } from "../domain/serialize.ts";
+import type { JsonObject } from "../domain/types.ts";
 
 export function fakeResponse(
   status: number,
@@ -42,14 +45,25 @@ export function createFakeGraph(
 ) {
   const blobs = new Map<string, string>();
   const trees = new Map<string, { path: string; sha: string }[]>();
-  const commits = new Map<string, { treeSha: string; parents: string[] }>();
+  const commits = new Map<
+    string,
+    { treeSha: string; parents: string[]; message: string; date: string }
+  >();
+  const commitOrder: string[] = [];
   let head: string | null = null;
   let counter = 0;
   const nextSha = (prefix: string) => `${prefix}-${++counter}`;
+  const nextDate = () =>
+    new Date(Date.UTC(2026, 0, 1) + counter * 60_000).toISOString();
 
+  const blobShaByContent = new Map<string, string>();
+  /** Content-addressed, like real Git blobs — identical content reuses the same sha, which is what listDocumentHistory's "did this path's blob change" filtering depends on. */
   function putBlob(content: string): string {
+    const existing = blobShaByContent.get(content);
+    if (existing !== undefined) return existing;
     const sha = nextSha("blob");
     blobs.set(sha, content);
+    blobShaByContent.set(content, sha);
     return sha;
   }
   function putTree(
@@ -70,9 +84,14 @@ export function createFakeGraph(
     );
     return sha;
   }
-  function putCommit(treeSha: string, parents: string[]): string {
+  function putCommit(
+    treeSha: string,
+    parents: string[],
+    message = "initial commit",
+  ): string {
     const sha = nextSha("commit");
-    commits.set(sha, { treeSha, parents });
+    commits.set(sha, { treeSha, parents, message, date: nextDate() });
+    commitOrder.push(sha);
     return sha;
   }
 
@@ -82,17 +101,52 @@ export function createFakeGraph(
         ? [
             {
               path: "remember.json",
-              sha: putBlob(encodeBase64(JSON.stringify(initialDocument))),
+              sha: putBlob(
+                encodeBase64(serializeDocument(initialDocument as JsonObject)),
+              ),
             },
           ]
         : [{ path: "README.md", sha: putBlob(encodeBase64("placeholder")) }];
     if (initialTrash) {
       entries.push({
         path: ".trash/trash.json",
-        sha: putBlob(encodeBase64(JSON.stringify(initialTrash))),
+        sha: putBlob(encodeBase64(serializeTrash(initialTrash))),
       });
     }
     head = putCommit(putTree(undefined, entries), []);
+  }
+
+  /** Mirrors GitHub's commits-by-path listing: only commits where that path's blob actually changed, newest first, paginated. */
+  function handleListCommits(path: string): Response {
+    const query = new URLSearchParams(path.split("?")[1] ?? "");
+    const filePath = query.get("path") ?? "";
+    const perPage = Number(query.get("per_page") ?? "20");
+    const page = Number(query.get("page") ?? "1");
+
+    function blobShaAt(commitSha: string): string | undefined {
+      const commit = commits.get(commitSha);
+      if (!commit) return undefined;
+      return trees.get(commit.treeSha)?.find((e) => e.path === filePath)?.sha;
+    }
+
+    const relevant = commitOrder.filter((sha) => {
+      const commit = commits.get(sha)!;
+      const current = blobShaAt(sha);
+      if (current === undefined) return false;
+      const parentSha = commit.parents[0];
+      const previous = parentSha ? blobShaAt(parentSha) : undefined;
+      return current !== previous;
+    });
+    const newestFirst = relevant.slice().reverse();
+    const start = (page - 1) * perPage;
+    const results = newestFirst.slice(start, start + perPage).map((sha) => {
+      const commit = commits.get(sha)!;
+      return {
+        sha,
+        commit: { message: commit.message, author: { date: commit.date } },
+      };
+    });
+    return fakeResponse(200, results);
   }
 
   async function handle(url: string, init?: RequestInit): Promise<Response> {
@@ -120,8 +174,16 @@ export function createFakeGraph(
     const blobMatch = /\/git\/blobs\/([^/?]+)$/.exec(path);
     if (method === "GET" && blobMatch) {
       const content = blobs.get(blobMatch[1]!);
-      if (content === undefined) return fakeResponse(404, { message: "Not Found" });
+      if (content === undefined)
+        return fakeResponse(404, { message: "Not Found" });
       return fakeResponse(200, { content, encoding: "base64" });
+    }
+    if (
+      method === "GET" &&
+      path.startsWith("/repos/") &&
+      path.includes("/commits?")
+    ) {
+      return handleListCommits(path);
     }
     if (method === "POST" && path.endsWith("/git/blobs")) {
       const body = JSON.parse(init!.body as string) as { content: string };
@@ -133,19 +195,29 @@ export function createFakeGraph(
         tree: { path: string; sha: string }[];
       };
       return fakeResponse(201, {
-        sha: putTree(body.base_tree, body.tree.map(({ path, sha }) => ({ path, sha }))),
+        sha: putTree(
+          body.base_tree,
+          body.tree.map(({ path, sha }) => ({ path, sha })),
+        ),
       });
     }
     if (method === "POST" && path.endsWith("/git/commits")) {
       const body = JSON.parse(init!.body as string) as {
         tree: string;
         parents: string[];
+        message?: string;
       };
-      return fakeResponse(201, { sha: putCommit(body.tree, body.parents) });
+      return fakeResponse(201, {
+        sha: putCommit(body.tree, body.parents, body.message),
+      });
     }
     if (method === "POST" && path.endsWith("/git/refs")) {
-      const body = JSON.parse(init!.body as string) as { ref: string; sha: string };
-      if (head !== null) return fakeResponse(422, { message: "Reference already exists" });
+      const body = JSON.parse(init!.body as string) as {
+        ref: string;
+        sha: string;
+      };
+      if (head !== null)
+        return fakeResponse(422, { message: "Reference already exists" });
       head = body.sha;
       return fakeResponse(201, { ref: body.ref, object: { sha: head } });
     }
@@ -162,13 +234,20 @@ export function createFakeGraph(
     throw new Error(`createFakeGraph: unhandled request ${method} ${path}`);
   }
 
-  return { handle, getHead: () => head, blobText: (sha: string) => blobs.get(sha) };
+  return {
+    handle,
+    getHead: () => head,
+    blobText: (sha: string) => blobs.get(sha),
+  };
 }
 
 /** Routes to `graph` by default; `overrides` intercepts a matching call to inject a failure instead. */
 export function installFetch(
   graph: ReturnType<typeof createFakeGraph>,
-  overrides: { when: (url: string, init?: RequestInit) => boolean; respond: () => Response }[] = [],
+  overrides: {
+    when: (url: string, init?: RequestInit) => boolean;
+    respond: () => Response;
+  }[] = [],
 ) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const override = overrides.find((o) => o.when(url, init));

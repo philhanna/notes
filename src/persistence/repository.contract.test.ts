@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Repository } from "./repository.ts";
 import { createInMemoryRepository } from "./inMemoryRepository.ts";
 import { createGithubRepository } from "./githubRepository.ts";
-import { EMPTY_TRASH } from "../domain/trash.ts";
+import { EMPTY_TRASH, serializeTrash } from "../domain/trash.ts";
 import type { TrashDocument } from "../domain/trash.ts";
+import { serializeDocument } from "../domain/serialize.ts";
+import type { JsonObject } from "../domain/types.ts";
 
 function fakeResponse(status: number, body: unknown): Response {
   return {
@@ -33,6 +35,8 @@ interface TreeNode {
 interface CommitNode {
   treeSha: string;
   parents: string[];
+  message: string;
+  date: string;
 }
 
 /**
@@ -53,17 +57,28 @@ function stubGithubTransport(
   const blobs = new Map<string, string>();
   const trees = new Map<string, TreeNode[]>();
   const commits = new Map<string, CommitNode>();
+  const commitOrder: string[] = [];
   let head = "";
   let counter = 0;
   const nextSha = (prefix: string) => `${prefix}-${++counter}`;
+  const nextDate = () =>
+    new Date(Date.UTC(2026, 0, 1) + counter * 60_000).toISOString();
 
+  const blobShaByContent = new Map<string, string>();
+  /** Content-addressed, like real Git blobs — identical content reuses the same sha. */
   function putBlob(content: string): string {
+    const existing = blobShaByContent.get(content);
+    if (existing !== undefined) return existing;
     const sha = nextSha("blob");
     blobs.set(sha, content);
+    blobShaByContent.set(content, sha);
     return sha;
   }
 
-  function putTree(baseTreeSha: string | undefined, entries: TreeNode[]): string {
+  function putTree(
+    baseTreeSha: string | undefined,
+    entries: TreeNode[],
+  ): string {
     const merged = new Map<string, string>(
       (baseTreeSha ? (trees.get(baseTreeSha) ?? []) : []).map((entry) => [
         entry.path,
@@ -74,25 +89,42 @@ function stubGithubTransport(
     const sha = nextSha("tree");
     trees.set(
       sha,
-      [...merged.entries()].map(([path, entrySha]) => ({ path, sha: entrySha })),
+      [...merged.entries()].map(([path, entrySha]) => ({
+        path,
+        sha: entrySha,
+      })),
     );
     return sha;
   }
 
-  function putCommit(treeSha: string, parents: string[]): string {
+  function putCommit(
+    treeSha: string,
+    parents: string[],
+    message = "initial commit",
+  ): string {
     const sha = nextSha("commit");
-    commits.set(sha, { treeSha, parents });
+    commits.set(sha, { treeSha, parents, message, date: nextDate() });
+    commitOrder.push(sha);
     return sha;
   }
 
   // Seed the initial commit (and tree/blobs) matching what loadDocument expects to find.
+  // Uses serializeDocument/serializeTrash, not plain JSON.stringify, so a
+  // save that leaves content logically unchanged reuses this same blob sha
+  // (real Git blobs are content-addressed) instead of always minting a new
+  // one from a differently-formatted byte string.
   const initialEntries: TreeNode[] = [
-    { path: DOCUMENT_PATH, sha: putBlob(encodeBase64(JSON.stringify(initialDocument))) },
+    {
+      path: DOCUMENT_PATH,
+      sha: putBlob(
+        encodeBase64(serializeDocument(initialDocument as JsonObject)),
+      ),
+    },
   ];
   if (initialTrash) {
     initialEntries.push({
       path: TRASH_PATH,
-      sha: putBlob(encodeBase64(JSON.stringify(initialTrash))),
+      sha: putBlob(encodeBase64(serializeTrash(initialTrash))),
     });
   }
   const initialTreeSha = putTree(undefined, initialEntries);
@@ -124,8 +156,51 @@ function stubGithubTransport(
       const blobMatch = /\/git\/blobs\/([^/?]+)$/.exec(path);
       if (method === "GET" && blobMatch) {
         const content = blobs.get(blobMatch[1]!);
-        if (content === undefined) return fakeResponse(404, { message: "Not Found" });
+        if (content === undefined)
+          return fakeResponse(404, { message: "Not Found" });
         return fakeResponse(200, { content, encoding: "base64" });
+      }
+      if (
+        method === "GET" &&
+        path.startsWith("/repos/") &&
+        path.includes("/commits?")
+      ) {
+        const query = new URLSearchParams(path.split("?")[1] ?? "");
+        const filePath = query.get("path") ?? "";
+        const perPage = Number(query.get("per_page") ?? "20");
+        const page = Number(query.get("page") ?? "1");
+
+        function blobShaAt(commitSha: string): string | undefined {
+          const commit = commits.get(commitSha);
+          if (!commit) return undefined;
+          return trees.get(commit.treeSha)?.find((e) => e.path === filePath)
+            ?.sha;
+        }
+
+        const relevant = commitOrder.filter((sha) => {
+          const commit = commits.get(sha)!;
+          const current = blobShaAt(sha);
+          if (current === undefined) return false;
+          const parentSha = commit.parents[0];
+          const previous = parentSha ? blobShaAt(parentSha) : undefined;
+          return current !== previous;
+        });
+        const start = (page - 1) * perPage;
+        const results = relevant
+          .slice()
+          .reverse()
+          .slice(start, start + perPage)
+          .map((sha) => {
+            const commit = commits.get(sha)!;
+            return {
+              sha,
+              commit: {
+                message: commit.message,
+                author: { date: commit.date },
+              },
+            };
+          });
+        return fakeResponse(200, results);
       }
       if (method === "POST" && path.endsWith("/git/blobs")) {
         const body = JSON.parse(init!.body as string) as { content: string };
@@ -137,15 +212,21 @@ function stubGithubTransport(
           tree: { path: string; sha: string }[];
         };
         return fakeResponse(201, {
-          sha: putTree(body.base_tree, body.tree.map(({ path, sha }) => ({ path, sha }))),
+          sha: putTree(
+            body.base_tree,
+            body.tree.map(({ path, sha }) => ({ path, sha })),
+          ),
         });
       }
       if (method === "POST" && path.endsWith("/git/commits")) {
         const body = JSON.parse(init!.body as string) as {
           tree: string;
           parents: string[];
+          message?: string;
         };
-        return fakeResponse(201, { sha: putCommit(body.tree, body.parents) });
+        return fakeResponse(201, {
+          sha: putCommit(body.tree, body.parents, body.message),
+        });
       }
       if (method === "PATCH" && path.endsWith(`/git/refs/heads/${BRANCH}`)) {
         const body = JSON.parse(init!.body as string) as { sha: string };
@@ -157,7 +238,9 @@ function stubGithubTransport(
         return fakeResponse(200, { object: { sha: head } });
       }
 
-      throw new Error(`stubGithubTransport: unhandled request ${method} ${path}`);
+      throw new Error(
+        `stubGithubTransport: unhandled request ${method} ${path}`,
+      );
     }),
   );
 }
@@ -285,6 +368,74 @@ function runContractTests(name: string, createRepository: () => Repository) {
         { kind: "delete", path: ["gone"] },
       );
       expect(stale).toEqual({ ok: false, error: { kind: "conflict" } });
+    });
+
+    it("lists only commits where the document actually changed, newest first", async () => {
+      const repository = createRepository();
+      const loaded = await repository.loadDocument();
+      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
+
+      // A trash-only change does not touch remember.json's content, so it
+      // should not appear in remember.json's history (design.md 9's "list
+      // commits affecting the data ... files" — path-filtered, like `git
+      // log -- path`).
+      const trashOnly = await repository.save(
+        {
+          document: loaded.value.document,
+          trash: {
+            version: 1,
+            records: [
+              {
+                id: "trash-1",
+                deletedAt: "2026-07-14T00:00:00.000Z",
+                originalPath: "/gone",
+                type: "string",
+                value: "gone",
+              },
+            ],
+          },
+        },
+        loaded.value.sha,
+        { kind: "delete", path: ["gone"] },
+      );
+      if (!trashOnly.ok) throw new Error("expected trash-only save to succeed");
+
+      const documentChange = await repository.save(
+        { document: { hardinfo: "updated" }, trash: EMPTY_TRASH },
+        trashOnly.value.sha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      if (!documentChange.ok)
+        throw new Error("expected document-change save to succeed");
+
+      const history = await repository.listDocumentHistory();
+      expect(history.ok).toBe(true);
+      if (history.ok) {
+        const shas = history.value.map((entry) => entry.sha);
+        expect(shas[0]).toBe(documentChange.value.sha);
+        expect(shas).not.toContain(trashOnly.value.sha);
+      }
+    });
+
+    it("reads the document as it existed at an earlier commit, without disturbing the current save", async () => {
+      const repository = createRepository();
+      const loaded = await repository.loadDocument();
+      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
+
+      const saved = await repository.save(
+        { document: { hardinfo: "updated" }, trash: EMPTY_TRASH },
+        loaded.value.sha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      if (!saved.ok) throw new Error("expected save to succeed");
+
+      const atOriginal = await repository.loadDocumentAt(loaded.value.sha);
+      expect(atOriginal).toEqual({ ok: true, value: loaded.value.document });
+
+      const current = await repository.loadDocument();
+      expect(current.ok).toBe(true);
+      if (current.ok)
+        expect(current.value.document).toEqual({ hardinfo: "updated" });
     });
   });
 }

@@ -29,8 +29,7 @@ export async function getHeadCommitSha(
     accessToken,
   );
   if (!result.ok) return result;
-  const sha = (result.value.body as { object?: { sha?: string } }).object
-    ?.sha;
+  const sha = (result.value.body as { object?: { sha?: string } }).object?.sha;
   if (typeof sha !== "string") return err({ kind: "malformed" });
   return ok(sha);
 }

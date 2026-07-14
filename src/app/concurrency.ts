@@ -42,5 +42,7 @@ export function affectedPaths(operation: Operation): {
       return { document: [], trash: [operation.trashId] };
     case "empty-trash":
       return { document: [], trash: "all" };
+    case "restore":
+      return { document: [operation.path], trash: [] };
   }
 }

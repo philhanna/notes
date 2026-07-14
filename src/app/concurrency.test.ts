@@ -35,4 +35,14 @@ describe("affectedPaths", () => {
       trash: "all",
     });
   });
+
+  it("names the target path for restore", () => {
+    expect(
+      affectedPaths({
+        kind: "restore",
+        path: ["tips"],
+        revisionSha: "abc1234",
+      }),
+    ).toEqual({ document: [["tips"]], trash: [] });
+  });
 });
