@@ -36,9 +36,15 @@ performance in a phone browser is the practical size constraint.
 
 ## 3. System architecture
 
-The system has three parts: a static web app that runs in the browser, a
+The system has three main parts: a static web app that runs in the browser, a
 GitHub App that proves who the user is, and a private GitHub repository that
 stores the data. The two unfamiliar pieces are explained in detail below.
+
+It also has one small, stateless piece of infrastructure — an auth relay —
+that exists only because of a browser restriction discovered during
+implementation. Section 3.4 explains why it is necessary and why it does not
+reintroduce the server-side risks (secrets, a database, ongoing hosting) that
+the static-PWA design otherwise avoids.
 
 ### 3.1 Static PWA
 
@@ -51,11 +57,12 @@ or a bank site), which have a backend server doing work on every request.
 Here, the browser downloads the files once and then does all the work itself,
 talking directly to GitHub's API for data.
 
-This matters because it removes an entire category of things to build and
-secure: no server to host, patch, or pay for; no server-side database; no
-server-side secret to leak. The tradeoff is that anything the app needs to do
-— rendering the tree, validating input, calling GitHub — has to happen in the
-user's browser using JavaScript.
+This matters because it removes most of the category of things to build and
+secure: no server-side database, no server-side secret to leak, and — with
+one narrow exception covered in section 3.4 — no server to host, patch, or
+pay for. The tradeoff is that anything the app needs to do — rendering the
+tree, validating input, calling GitHub — has to happen in the user's browser
+using JavaScript.
 
 "PWA" stands for Progressive Web App, explained fully in section 4; in short,
 it is a website that a browser can also "install" so it behaves like a
@@ -80,6 +87,8 @@ problem:
   keeps the rest of the app's code from needing to know GitHub API details
   directly, which also makes it possible to test the app against a fake
   in-memory repository instead of the real GitHub API (see `docs/impl.md`).
+  All of these calls go to `api.github.com` directly from the browser; only
+  the two device-flow calls described in section 3.4 go through the relay.
 - **Install manifest** — a small JSON file (conventionally `manifest.json`)
   that tells the browser the app's name, icon, and colors, so "Install app"
   or "Add to Home screen" works and produces a proper-looking icon rather
@@ -131,12 +140,13 @@ having this specific access — without the app ever seeing or storing your
 GitHub password. The mechanism used here is the **OAuth device flow**
 (detailed in section 8): the app shows a short code, you open a GitHub page
 in any browser (including on another device) and enter it, and GitHub then
-hands the app a token scoped to exactly what the installation allows. Because
-this is a browser-only app with no server, device flow matters specifically
-because it does not require a **client secret** — a second, private
-credential that would normally have to live somewhere safe, which a static,
-publicly-downloadable bundle of JavaScript cannot provide (anyone could view
-it in the browser's developer tools).
+hands the app a token scoped to exactly what the installation allows. Device
+flow matters specifically because it does not require a **client secret** — a
+second, private credential that would normally have to live somewhere safe,
+which a static, publicly-downloadable bundle of JavaScript cannot provide
+(anyone could view it in the browser's developer tools). No secret is needed
+either way; section 3.4 explains a separate, unrelated browser restriction
+that device flow still runs into and how it is addressed without one.
 
 ### 3.3 Private GitHub repository
 
@@ -156,8 +166,52 @@ Enterprise private Pages is not required. Opening the public site reveals only
 the application shell and sign-in screen. It does not reveal repository names,
 note content, trash, history, or access tokens.
 
-There is no custom API or continuously running process. Tree operations execute
-in the PWA, and persistence uses GitHub's APIs.
+There is no custom API and no continuously running application server. Tree
+operations execute in the PWA, and persistence uses GitHub's APIs. Section 3.4
+describes one narrow, stateless exception used only for two authentication
+calls.
+
+### 3.4 Auth relay
+
+A browser blocks a webpage from reading the response of a cross-origin
+`fetch()` call unless the server explicitly allows it (this is called CORS,
+Cross-Origin Resource Sharing). GitHub's main API, `api.github.com`, allows
+this from any origin, so the PWA calls it directly. However, the two
+endpoints device flow itself depends on — requesting the short code
+(`github.com/login/device/code`) and exchanging it for a token
+(`github.com/login/oauth/access_token`) — do not allow this. This was not
+apparent from reading GitHub's documentation; it was discovered empirically
+during a Phase 0 spike (see `docs/impl.md`) by making the actual calls from a
+real browser at a foreign origin and observing the request fail with a CORS
+error, while the identical call from a non-browser context (where CORS does
+not apply) succeeded.
+
+Because of this, the PWA cannot complete device flow by calling those two
+endpoints directly. Instead, it calls a minimal relay — a small serverless
+function (for example, a Cloudflare Worker) — which forwards the request
+body to the corresponding `github.com` endpoint unchanged and returns the
+response with a CORS header added. Server-to-server calls are not subject to
+CORS, so the relay itself can reach `github.com` without restriction.
+
+The relay is deliberately as thin as possible, to preserve the spirit of the
+static-PWA design even though it is, strictly, a small piece of server-side
+infrastructure:
+
+- it holds no client secret (device flow does not use one) and no other
+  credential;
+- it stores nothing and keeps no session state between requests — each
+  request is forwarded independently;
+- it never sees note content, since notes are never sent to these two
+  endpoints; and
+- it is generic infrastructure (a CORS-adding forwarder), not
+  application-specific logic — the domain, persistence, and auth *decisions*
+  described elsewhere in this document all still happen in the browser.
+
+This is the one respect in which section 3's "no server" description is not
+literally true. It is called out on its own here because it was a design
+assumption invalidated by direct testing rather than a decision made in
+advance, and future readers should not assume the rest of the architecture
+needs a server merely because this one exception does.
 
 ## 4. Progressive Web App
 
@@ -335,7 +389,12 @@ When the user is already signed into GitHub in that browser, GitHub reuses the
 existing session; the user approves the app rather than entering credentials
 again.
 
-Device flow needs the public GitHub App client ID but no client secret. The
+Device flow needs the public GitHub App client ID but no client secret. Because
+the two `github.com` device-flow endpoints do not support cross-origin browser
+requests, the PWA reaches them through the stateless auth relay described in
+section 3.4, which holds no secret and forwards these two calls unchanged. All
+other GitHub calls (reading and writing repository content, listing history)
+go directly from the browser to `api.github.com`, which does support them. The
 GitHub App is installed only on the dedicated private notes repository and is
 granted the minimum repository Contents permission needed to read and write it.
 It receives no access to unrelated repositories.

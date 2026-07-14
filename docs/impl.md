@@ -2,11 +2,20 @@
 
 ## 0. Current status
 
-As of the latest commit, the repository contains only documentation
-(`docs/requirements.md`, `docs/design.md`, `docs/impl.md`, `docs/questions.md`,
-`docs/remember.json`). A prior TypeScript vertical slice was built and then
-intentionally deleted (commit `3c93594`) so implementation could restart
-against this plan. No phase below has started.
+A prior TypeScript vertical slice was built and then intentionally deleted
+(commit `3c93594`) so implementation could restart against this plan.
+
+Phase 0 is in progress. The Vite + React + TypeScript scaffold, quality gates
+(lint, type-check, unit test, build), and minimal installable PWA shell exist
+and pass. A disposable private repository (`philhanna/notes-data`) and a
+GitHub App (device flow enabled, Contents: Read and write, installed only on
+that repository) exist and were used to run spikes 1–3 successfully. Spike 4
+found that device flow's two `github.com` endpoints do not support browser
+CORS — see `docs/design.md` section 3.4 for the resolution (a minimal
+stateless auth relay), verified locally but not yet deployed. Remaining before
+Phase 0 can be checked off: deploy the relay for real, rerun spike 4 against
+the deployed Pages origin, and confirm the other Phase 0 exit criteria (CI,
+secret scanning).
 
 - [ ] Phase 0 — Project foundation and risk spikes
 - [ ] Phase 1 — Domain model and local tree browser
@@ -34,12 +43,17 @@ Recommended stack:
 - a small explicit state layer rather than a database-shaped client framework;
 - Vitest and Testing Library for unit and component tests;
 - Playwright for browser and PWA tests;
-- ESLint and Prettier for static checks; and
-- GitHub Actions and GitHub Pages for CI and deployment.
+- ESLint and Prettier for static checks;
+- GitHub Actions and GitHub Pages for CI and deployment; and
+- a minimal serverless function platform (for example, Cloudflare Workers) for
+  the stateless auth relay in `docs/design.md` section 3.4 — nothing else runs
+  there.
 
 Use Web Crypto where cryptographic browser APIs are needed. Do not add a custom
 backend, service worker data store, or client-side notes cache beyond the loaded
-in-memory document and deliberately retained unsaved editor state.
+in-memory document and deliberately retained unsaved editor state. The auth
+relay is the sole exception to "no backend," and it must stay a stateless
+forwarder with no secret, no persistence, and no application logic.
 
 ## 2. Proposed code boundaries
 
@@ -53,12 +67,17 @@ src/
   app/          application state and operation orchestration
   components/   responsive presentation and interaction
   pwa/          manifest, update handling, and service-worker registration
+relay/          stateless auth relay (deployed separately from the PWA;
+                see docs/design.md section 3.4)
 ```
 
 The domain layer must be pure TypeScript: an operation receives a document and
 returns a new document or a typed error. The persistence layer must expose an
 interface that can be backed by both an in-memory fake and GitHub. React
-components should not call GitHub APIs or mutate JSON directly.
+components should not call GitHub APIs or mutate JSON directly. The `auth`
+module is the only part of `src/` aware that two of its calls go to the relay's
+URL instead of directly to `github.com`; everything downstream of it just sees
+a token.
 
 Represent locations internally as arrays of object keys and array indices.
 Encode and decode JSON Pointer only at URL, repository metadata, and display
@@ -75,26 +94,47 @@ Before proceeding, prove the following against a disposable private repository:
 
 1. A static browser application can complete the selected GitHub App device
    authorization flow, refresh authorization, and make authenticated API calls
-   without a client secret or proxy.
+   without a client secret. **Result: confirmed, with one correction.** Device
+   flow itself needs no client secret, and direct browser calls to
+   `api.github.com` work with no proxy. But the two `github.com` endpoints
+   device flow depends on (`/login/device/code` and
+   `/login/oauth/access_token`) do not send CORS headers, so a browser blocks
+   reading their response from any origin other than `github.com` itself —
+   confirmed both by inspecting response headers and by reproducing the
+   failure in a real headless-browser `fetch()` call. A minimal stateless
+   relay (no secret, no persistence, forwards the request body unchanged and
+   adds a CORS header) resolves this; see `docs/design.md` section 3.4. Proven
+   locally (relay running under `wrangler dev`, real device/user code returned
+   to a foreign-origin browser call); not yet proven from an actual deployed
+   Pages + relay origin (see item 4).
 2. The app can read the repository head and atomically commit both
    `remember.json` and `.trash/trash.json` by creating Git blobs, a tree, and a
-   commit, then conditionally advancing the branch ref.
+   commit, then conditionally advancing the branch ref. **Result: confirmed**
+   against `philhanna/notes-data` — one commit created both files together.
 3. A stale writer cannot advance that ref and can distinguish a conflict from a
-   network or authorization failure.
-4. Required GitHub API calls work from the deployed Pages origin under browser
-   CORS rules.
+   network or authorization failure. **Result: confirmed** — a second writer
+   using the same base commit was rejected with `422 Update is not a fast
+   forward`, distinct in status and body from a `401 Bad credentials` auth
+   failure.
+4. Required GitHub API calls, and the auth relay, work from the deployed Pages
+   origin under browser CORS rules. **Not yet done** — proven so far only from
+   a local stand-in origin, not the real deployed GitHub Pages origin plus a
+   deployed (not just locally-run) relay.
 
 Use the Git Data API for multi-file writes; the Contents API alone cannot make
 the active document and trash update one atomic commit. Capture request/response
 fixtures with credentials and note content removed. If any spike fails, revise
-the relevant design assumption before building dependent features.
+the relevant design assumption before building dependent features — spike 1
+did fail in its original form, and `docs/design.md` section 3.4 is that
+revision.
 
 Exit criteria:
 
-- [ ] lint, type-check, unit test, build, and a smoke test run in CI;
-- [ ] the app installs locally as a PWA and shows no note data while signed out;
+- [x] lint, type-check, unit test, build, and a smoke test run in CI;
+- [x] the app installs locally as a PWA and shows no note data while signed out;
 - [ ] a documented spike demonstrates private-repository read and conditional,
-  atomic write from the deployed origin; and
+  atomic write from the deployed origin, including the auth relay actually
+  deployed (not just run locally); and
 - [ ] secrets and tokens are absent from source, build artifacts, URLs, and logs.
 
 ### Phase 1 — Domain model and local tree browser
@@ -127,7 +167,10 @@ Exit criteria:
 
 Implement GitHub authorization and repository setup. Keep tokens in per-device
 browser storage, centralize authenticated requests, redact diagnostics, and
-handle refresh, revocation, sign-out, and authorization expiry.
+handle refresh, revocation, sign-out, and authorization expiry. Deploy the
+`relay/` function from a real account (Phase 0 proved it locally only) and
+point the auth module at its URL; the relay's own address is non-secret
+configuration, not a credential.
 
 The setup flow should accept owner, repository, and branch; confirm that the
 repository is private and writable; discover the repository's default branch;
@@ -280,6 +323,9 @@ least-privilege credentials; do not expose those credentials to pull requests.
   and operation metadata; `remember.json` remains ordinary JSON.
 - Avoid premature optimization. Measure generated large trees on target phones
   before adding workers, virtualization, or a third-party search index.
+- Keep the auth relay (`docs/design.md` section 3.4) a stateless forwarder for
+  exactly two endpoints. It must never gain a secret, a database, session
+  state, or application logic; anything more defeats the reason it exists.
 
 ## 6. Release milestones
 
@@ -296,39 +342,44 @@ criteria, automated tests, security checks, and failure recovery must all pass.
 
 ### How to test progress so far
 
-No application code exists yet, so there is nothing to run or test today.
-Until Phase 0 lands, verification means reviewing the documents rather than
-running anything:
+The Vite + React + TypeScript scaffold exists and its quality gates pass:
+`npm run format`, `npm run lint`, `npm run typecheck`, `npm test`, and
+`npm run build` all succeed, and `vite preview` serves the built shell,
+manifest, icon, and service worker correctly. CI (`.github/workflows/ci.yml`)
+runs the same checks on push and pull request.
 
-- Re-read `docs/requirements.md` and `docs/design.md` together and confirm
-  every requirement has a corresponding design section and phase above.
-- Confirm `docs/questions.md`'s open items are actually resolved in
-  `docs/design.md` section 15 ("Open questions"), which currently reads
-  "None currently."
-- Do not treat any GitHub integration claim in this plan as verified by
-  reasoning or by reading GitHub's docs alone. Phase 0's exit criteria exist
-  specifically because device flow, atomic multi-file commits, conflict
-  detection, and CORS behavior from the deployed origin must be proven against
-  a real disposable repository, not assumed.
+Spikes 1–3 were run against a real disposable private repository
+(`philhanna/notes-data`) with a real GitHub App (device flow enabled,
+Contents: Read and write, installed only on that repository) and passed;
+throwaway scripts and redacted result fixtures live under `spikes/` (git-
+ignored: `spikes/.local/` holds the live token, never committed). Spike 4
+found that device flow's two `github.com` endpoints reject cross-origin
+browser calls (no CORS headers) — confirmed by both inspecting response
+headers and reproducing the failure in a real headless-browser `fetch()` —
+and that a minimal stateless relay fixes it, verified locally under
+`wrangler dev`. `docs/design.md` section 3.4 records this as the corrected
+design assumption.
 
-Once Phase 0 code exists, the first real checks are: lint, type-check, unit
-tests, a production build, and a CI smoke test, plus the four numbered spikes
-in Phase 0 run manually against a disposable private repository, with
-redacted request/response fixtures kept as evidence.
+Do not treat any further GitHub integration claim in this plan as verified by
+reasoning or by reading GitHub's docs alone — the CORS finding above is a
+direct example of why: it was not apparent from documentation and only
+surfaced by making the actual calls from a real browser.
 
 ### Immediate next steps
 
-1. Scaffold the Vite + TypeScript project and CI quality gates (Phase 0,
-   first paragraph): lint, type-check, unit tests, build, and a minimal
-   installable shell.
-2. Register a GitHub App and create a disposable private repository to run
-   the Phase 0 spikes against. **This requires your explicit approval before
-   creating or configuring either one.**
-3. Run and document the four Phase 0 spikes: device-flow authorization and
-   refresh without a client secret or proxy; an atomic multi-file commit via
-   the Git Data API; a rejected stale-writer commit distinguished from a
-   network/authorization failure; and required API calls succeeding under
-   CORS from the deployed Pages origin.
-4. Only after all four spikes pass and Phase 0's other exit criteria are met,
-   check off Phase 0 above, then proceed to Phase 1 (domain model and local
-   tree browser) as the next planned phase.
+1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
+2. ~~Register a GitHub App and create a disposable private repository.~~ Done
+   (`philhanna/notes-data`; app installed on it only).
+3. ~~Run and document spikes 1–3.~~ Done, passed. Spike 4 (CORS from the
+   deployed Pages origin) is partially done: the failure is confirmed and a
+   fix is verified locally, but not yet from a real deployed origin.
+4. Deploy the auth relay for real (a Cloudflare Worker or equivalent, holding
+   no secret) and redeploy/host the PWA shell (even a throwaway GitHub Pages
+   deployment is enough for this spike). **This requires your explicit
+   approval before creating or configuring either one**, the same as step 2
+   did. Rerun spike 4 from that real origin.
+5. Run a secret/dependency scan over the current scaffold and confirm no
+   secrets or tokens appear in source, build artifacts, URLs, or logs.
+6. Only after spike 4 passes from the real deployed origin and the rest of
+   Phase 0's exit criteria are met, check off Phase 0 above, then proceed to
+   Phase 1 (domain model and local tree browser).
