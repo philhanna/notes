@@ -18,10 +18,10 @@ source repository (`philhanna/notes`) was made public per `docs/design.md`
 section 3.3 (it contains no secrets or note data) and deployed to GitHub
 Pages at `https://philhanna.github.io/notes/`, and spike 4 was rerun from
 that real deployed origin against the real deployed relay — confirmed, see
-`spikes/fixtures/04-cors.json`. Remaining before Phase 0 can be checked off:
-a secret/dependency scan over the current scaffold.
+`spikes/fixtures/04-cors.json`. A secret/dependency scan over the scaffold
+found nothing to fix. All Phase 0 exit criteria are met.
 
-- [ ] Phase 0 — Project foundation and risk spikes
+- [x] Phase 0 — Project foundation and risk spikes
 - [ ] Phase 1 — Domain model and local tree browser
 - [ ] Phase 2 — Authentication, setup, and basic persistence
 - [ ] Phase 3 — Complete tree operations and trash
@@ -144,7 +144,13 @@ Exit criteria:
 - [x] a documented spike demonstrates private-repository read and conditional,
   atomic write from the deployed origin, including the auth relay actually
   deployed (not just run locally); and
-- [ ] secrets and tokens are absent from source, build artifacts, URLs, and logs.
+- [x] secrets and tokens are absent from source, build artifacts, URLs, and
+  logs. **Confirmed:** `npm audit` reports 0 vulnerabilities; a pattern sweep
+  of `src/`, `dist/`, `docs/`, `spikes/`, `.github/`, and local wrangler logs
+  found no live credentials. The one live token
+  (`spikes/.local/token.json`) is excluded from git by `*.local` in
+  `.gitignore`; `.claude/settings.json` contains only a placeholder `dummy`
+  bearer value and the app's public (non-secret) client ID.
 
 ### Phase 1 — Domain model and local tree browser
 
@@ -390,7 +396,7 @@ surfaced by making the actual calls from a real browser.
    repository) made public per `docs/design.md` section 3.3 and deployed to
    GitHub Pages; spike 4 rerun from `https://philhanna.github.io/notes/`
    against the deployed relay and passed.
-5. Run a secret/dependency scan over the current scaffold and confirm no
-   secrets or tokens appear in source, build artifacts, URLs, or logs.
-6. Only after the rest of Phase 0's exit criteria are met, check off Phase 0
-   above, then proceed to Phase 1 (domain model and local tree browser).
+5. ~~Run a secret/dependency scan over the current scaffold.~~ Done: `npm
+   audit` clean, no credentials found in source, build artifacts, or logs.
+6. ~~Check off Phase 0.~~ Done — all exit criteria met. Next: Phase 1
+   (domain model and local tree browser).
