@@ -1,24 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(echo *)",
-      "Bash(npm *)",
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(grep *)",
-      "Bash(node *)",
-      "Bash(curl *)",
-      "Bash(npx *)",
-      "Skill(run)",
-      "Skill(run:*)",
-      "Bash(npx vitest *)",
-      "Bash(npx tsc *)",
-      "Bash(echo \"TSC_EXIT=$?\")",
-      "Bash(npm run *)",
-      "Bash(echo \"LINT_EXIT=$?\")",
-      "Bash(pkill -f \"vite --port 5199\")",
-      "Bash(git stash *)",
-      "Bash(npx prettier *)"
-    ]
+    "allow": ["Bash(*)"]
   }
 }
