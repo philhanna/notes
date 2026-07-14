@@ -35,6 +35,53 @@ textarea {
 
 button {
   padding: 0 0.75rem;
+  min-width: 2.75rem;
+}
+
+.skip-link {
+  position: absolute;
+  top: -3rem;
+  left: 0.5rem;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: light-dark(#fff, #111318);
+  color: light-dark(#111318, #fff);
+  border-radius: 0.25rem;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.status-banner {
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.status-banner--offline {
+  border: 1px solid light-dark(#b08900, #e0b400);
+  color: light-dark(#6b5300, #e0b400);
+}
+
+.status-banner--update {
+  border: 1px solid light-dark(#0a5, #4ade80);
+  color: light-dark(#04713a, #4ade80);
+}
+
+.tree-browser__heading {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .breadcrumbs ol {

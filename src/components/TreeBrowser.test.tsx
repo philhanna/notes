@@ -153,4 +153,57 @@ describe("TreeBrowser", () => {
       screen.getByRole("button", { name: /^hardinfo/ }),
     ).toBeInTheDocument();
   });
+
+  it("moves focus to the level heading after breadcrumb navigation", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /^tips/ }));
+    expect(screen.getByRole("heading", { name: "tips" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Notes" }));
+    expect(screen.getByRole("heading", { name: "Notes" })).toHaveFocus();
+  });
+
+  it("writes a typed but unsaved value through to sessionStorage as it's typed", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
+    const textbox = within(hardinfoRow).getByLabelText("Value");
+    await user.clear(textbox);
+    await user.type(textbox, "not yet saved");
+
+    expect(sessionStorage.getItem("notes:draft:value:/hardinfo")).toBe(
+      "not yet saved",
+    );
+  });
+
+  it("restores a draft already in sessionStorage when the editor opens (post safe-refresh)", async () => {
+    sessionStorage.setItem("notes:draft:value:/hardinfo", "not yet saved");
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
+
+    expect(within(hardinfoRow).getByLabelText("Value")).toHaveValue(
+      "not yet saved",
+    );
+  });
+
+  it("clears a create-entry draft once the entry is saved", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness />);
+
+    await user.type(screen.getByLabelText("Key"), "draft-key");
+    await user.type(screen.getByLabelText("Value"), "draft value");
+    await user.click(screen.getByRole("button", { name: "Add entry" }));
+    unmount();
+
+    render(<Harness />);
+    expect(screen.getByLabelText("Key")).toHaveValue("");
+    expect(screen.getByLabelText("Value")).toHaveValue("");
+  });
 });

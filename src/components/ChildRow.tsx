@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { DocumentState, MutationError } from "../app/useDocument.ts";
+import { encodePointer } from "../domain/path.ts";
 import type { ChildEntry } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
@@ -258,6 +259,7 @@ export function ChildRow({
         <>
           <ValueEditor
             idPrefix={`edit-${label}`}
+            storageKey={encodePointer(entry.path)}
             initialText={JSON.stringify(entry.value)}
             submitLabel="Save"
             onSubmit={(value) => void handleValueSubmit(value)}

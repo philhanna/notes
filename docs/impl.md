@@ -173,13 +173,158 @@ current level from `TreeBrowser.tsx`, per design.md 6.1/10), and
 are met; see the testing notes in section 7, including one piece of new
 GitHub API surface this phase could not verify live.
 
+Phase 6 is **partially complete** — two of its four exit criteria are met,
+two genuinely are not, so unlike every earlier phase it is **not** checked
+off below; see the checkboxes at the end of this entry and section 7 for
+exactly what remains.
+
+Base-path bugs were fixed first: `vite.config.ts`'s `base: "/notes/"` was
+never matched by `public/manifest.json` (`start_url`/`scope`), by
+`public/sw.js`'s cached URL list, or by `registerServiceWorker.ts`'s
+registration path — all three were root-absolute static files Vite's
+build-time HTML rewriting never touches (confirmed by inspecting a real
+`dist/index.html`, which *does* get rewritten). `public/sw.js` was rewritten
+to derive its own base path from `self.location` rather than hardcode it, to
+cache Vite's real hashed `assets/*` bundle (cache-first, safe since those
+filenames are content-hashed and immutable) in addition to the shell
+document/manifest/icon, and to stop calling `skipWaiting()`/`clients.claim()`
+unconditionally on install. Instead, an updated worker now waits until the
+page explicitly asks it to activate (`activateWaitingServiceWorker`, a
+`{type:"SKIP_WAITING"}` postMessage), and `App.tsx` shows a small "An update
+is available" banner with a Reload button wired to it — design.md 13's "safe
+refresh" is now the user's own action rather than a silent takeover.
+`src/app/draftStorage.ts`/`useDraft.ts` mirror `ValueEditor`'s and
+`CreateEntryForm`'s typed text to `sessionStorage` (session-scoped, not
+`localStorage`, per the cross-phase safeguard about pending editor state),
+restoring it if the page reloads mid-edit and clearing it once the editor
+genuinely closes (success or explicit cancel) — this is what actually
+protects an in-progress edit across a safe-refresh or an accidental reload,
+since a `"network"` `PersistError` alone already left component state
+untouched. `src/app/useOnlineStatus.ts` adds a `navigator.onLine` banner in
+`App.tsx` so connectivity loss is reported proactively rather than only on
+the next failed save. `ConfirmDialog.tsx` is now a real modal: it traps
+Tab/Shift+Tab focus, treats Escape as Cancel, and restores focus to whatever
+triggered it. `TreeBrowser.tsx` and `TrashView.tsx` move focus to the
+current level's/view's heading after navigation, since `react-router-dom`
+(a listed but, this session confirmed, never-imported dependency) provides
+no router lifecycle to hook — it has been removed rather than left as dead
+weight. `src/index.css` adds a `prefers-reduced-motion` guard, a `min-width`
+alongside the existing touch-target `min-height`, and a skip-to-content
+link. `index.html` adds a restrictive `Content-Security-Policy` `<meta>` tag
+(GitHub Pages cannot set custom response headers, so this is the only option
+available), its allowlist checked directly against every real outbound host
+(`api.github.com`, the auth relay) rather than guessed. `ci.yml` adds an
+`npm audit --audit-level=high` step; `deploy-pages.yml` adds a
+`workflow_dispatch` `ref` input so a rollback is "re-dispatch this workflow
+with the previous release's git tag" rather than a new mechanism. Per a
+decision confirmed with the user this session, the Phase-0 auth relay
+(`notes-auth-relay-spike.ph1204.workers.dev`) and the single maskable SVG
+icon were deliberately left as-is rather than reworked — both already work,
+and reworking either would trade a real, working thing for a cosmetic one.
+
+Three real findings surfaced only by driving this against a real browser
+(Playwright/Chromium), not by reasoning or by the equivalent jsdom-based
+Vitest tests — the same lesson section 7 draws from Phase 0's CORS spike:
+
+1. Moving `registerServiceWorker()` out of `main.tsx`'s top-level script
+   (where it ran synchronously, before the page's own `load` event could
+   possibly fire) and into a React effect inside `App.tsx` (needed so it
+   could report update-availability back into component state) broke its
+   `window.addEventListener("load", ...)` registration: effects run after
+   the initial commit, by which point `load` had often already fired in a
+   fast local environment, so the listener silently never ran and `sw.js`
+   was never even requested. Confirmed by a Playwright run logging every
+   network request and seeing no request for `sw.js` at all. Fixed by
+   checking `document.readyState === "complete"` and registering
+   immediately in that case.
+2. The service worker's `controllerchange` listener reloaded the page
+   unconditionally — but that event also fires the *first* time any worker
+   starts controlling a previously uncontrolled page (via `clients.claim()`
+   on its very first activation), not only on a genuine later update. This
+   caused an unwanted reload on first visit that manifested as a real
+   Playwright test's `page.evaluate` failing with "Execution context was
+   destroyed, most likely because of a navigation" mid-test. Fixed by only
+   reloading when the page itself had asked a waiting worker to activate
+   (a `skipWaitingRequested` flag set solely by `activateWaitingServiceWorker`).
+3. `ConfirmDialog`'s original focus-restore approach (capture the previously
+   focused element, restore it in a `useEffect` cleanup) broke specifically
+   under React StrictMode's development-only double-invocation of effects
+   (mount → cleanup → remount, meant to surface missing-cleanup bugs): the
+   phantom cleanup fired immediately after every open and stole focus back
+   to the trigger before the user did anything. jsdom-based Vitest tests
+   never exercised this because Testing Library's `render` doesn't wrap
+   components in `StrictMode` the way `main.tsx`/`harness.tsx` do; only a
+   real `npm run dev` browser run surfaced it. Fixed by moving the
+   restoration into the explicit confirm/cancel handlers themselves rather
+   than an unmount effect — arguably more correct anyway, since "the dialog
+   closed" is a domain event here, not a React lifecycle detail.
+
+A fourth, non-bug finding shaped both the fix and its test: a service
+worker cannot intercept the requests made by the very page load that
+registers it (that load's JS/CSS are already in flight before the worker
+exists), so the shell's `assets/*` bundle is only actually cached starting
+from a *second* online visit. This matches real repeat-visitor behavior; the
+e2e offline tests prime the cache with one extra reload before going offline
+to model that accurately, rather than expecting offline support to appear
+after a single first-ever visit.
+
+Testing added this phase: `@playwright/test` and `@axe-core/playwright`
+(the repository had no committed real-browser test infrastructure before
+this — earlier "Playwright" mentions in this file were one-off spike
+scripts). `src/harness.tsx`/`harness.html` are a dev/test-only entry point
+mounting the real `TreeBrowser`/`ChildRow`/`ConfirmDialog`/`TrashView`
+components against `createInMemoryRepository` (the same fake the
+persistence contract tests already use) with a small fixture document —
+extending the codebase's existing "test everything without live GitHub"
+pattern to real-browser tests, since `App.tsx`'s auth gate otherwise makes
+that UI unreachable without a live GitHub sign-in. It is never referenced by
+`npm run build`/`index.html`, so it never ships in the deployed bundle
+(confirmed: `dist/` after a real build contains no `harness.html`). Playwright's
+config runs two independent servers/projects: `harness` (`vite dev`) for
+keyboard-only navigation and entry creation, the `ConfirmDialog` focus
+trap/Escape, and `@axe-core/playwright` scans (including with
+`prefers-reduced-motion` emulated); `pwa` (`vite preview` over the real
+`dist/` build, since `registerServiceWorker` only runs in a production
+build) for an axe scan of the pre-auth `SignIn` screen and the two
+service-worker/offline smoke tests described above. All 8 pass headless
+locally (`npm run e2e`) and are now a CI step in `ci.yml`, after
+`npx playwright install --with-deps chromium`. New Vitest coverage:
+`ConfirmDialog.test.tsx` (autofocus, Escape, Tab trap, focus-restore) and
+additions to `TreeBrowser.test.tsx` (focus-after-navigation, a draft's
+sessionStorage write-through and mount-time restore, a draft cleared after a
+successful create) — `npm test` now runs 305 tests (was 297).
+`npm run lint`, `npm run format`, `npm run typecheck`, and `npm run build`
+all pass; a `dist/` grep swept for token-like strings, the fixture note text,
+and confirmed only the already-public client ID/relay URL are present.
+
+This session had neither a real Android or Ubuntu device, live GitHub
+credentials, nor (per this environment's own network restrictions) a way to
+reach the deployed `*.workers.dev` relay directly — the same constraint
+Phases 4 and 5 recorded. So, matching how those phases drew the line: this
+phase implemented and automatically tested everything reachable from here
+(a real headless-Chromium browser, not just jsdom, for the accessibility and
+PWA-shell work), and leaves genuinely unverified, rather than silently
+checked off:
+
+- a real install-to-home-screen and a genuine two-version update-then-reload
+  cycle on actual Android Chrome and Ubuntu Chromium (this session's e2e
+  suite proves the mechanism's pieces individually — registration, caching,
+  the non-first-load reload guard — but not a full real install/upgrade);
+- the live two-real-browser-session GitHub acceptance test design.md 14
+  calls for;
+- enabling GitHub's repository-level secret scanning/push protection under
+  Settings → Code security — a one-time account action outside of code, not
+  something to flip without the user present; and
+- Phase 5's still-outstanding live `listDocumentHistory`/`loadDocumentAt`
+  check, unchanged since that phase's own write-up.
+
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
 - [x] Phase 2 — Authentication, setup, and basic persistence
 - [x] Phase 3 — Complete tree operations and trash
 - [x] Phase 4 — Concurrency and resilient saving
 - [x] Phase 5 — Search, history, restoration, and export
-- [ ] Phase 6 — PWA hardening, accessibility, and release
+- [ ] Phase 6 — PWA hardening, accessibility, and release (partial — see above)
 
 Check off a phase only when every exit-criteria checkbox below it is checked,
 not when its UI merely appears to work (see closing note in section 6).
@@ -195,10 +340,14 @@ Recommended stack:
 
 - TypeScript with strict compiler settings;
 - React and Vite for the static application;
-- React Router for addressable tree locations;
-- a small explicit state layer rather than a database-shaped client framework;
+- a small explicit state layer rather than a database-shaped client framework
+  (built as plain `useState`-based view switching in `App.tsx`/`TreeBrowser.tsx`
+  rather than a router — `react-router-dom` was tried, never actually wired
+  up, and removed as dead weight in Phase 6);
 - Vitest and Testing Library for unit and component tests;
-- Playwright for browser and PWA tests;
+- Playwright and `@axe-core/playwright` for browser, PWA, and accessibility
+  tests (added in Phase 6, against a dev-only harness for the parts of the
+  UI that otherwise require a live GitHub sign-in);
 - ESLint and Prettier for static checks;
 - GitHub Actions and GitHub Pages for CI and deployment; and
 - a minimal serverless function platform (for example, Cloudflare Workers) for
@@ -480,13 +629,29 @@ artifact.
 
 Exit criteria:
 
-- [ ] install, startup, upgrade, and rollback paths are tested;
-- [ ] offline mode shows the shell and a clear read/write-unavailable state without
-  exposing previously loaded notes after a fresh launch;
+- [ ] install, startup, upgrade, and rollback paths are tested. **Partial:**
+  startup and the update-prompt's individual mechanisms (registration,
+  cache-first asset caching, the non-first-load reload guard) are covered by
+  a real headless-Chromium e2e run; a genuine install-to-home-screen and a
+  real two-version update-then-reload cycle on actual Android Chrome/Ubuntu
+  Chromium, and an actual rollback dry run, are not — see the Phase 6
+  narrative above;
+- [x] offline mode shows the shell and a clear read/write-unavailable state without
+  exposing previously loaded notes after a fresh launch. **Confirmed** by two
+  Playwright/Chromium e2e tests against a real production build and service
+  worker (`e2e/pwa.spec.ts`): the shell and offline banner render from cache
+  when offline, and the signed-out screen never shows note content, offline
+  or not — structurally guaranteed since no note content is ever cached;
 - [ ] automated acceptance tests pass against a disposable private repository from
-  two browser sessions; and
-- [ ] the release checklist verifies token redaction, repository scoping, no note
+  two browser sessions. **Not done** — this session had no live GitHub
+  credentials or reachable relay; and
+- [x] the release checklist verifies token redaction, repository scoping, no note
   data in deployed assets or diagnostics, and successful JSON export.
+  **Confirmed:** a fresh `dist/` grep found no tokens or note fixture text
+  (only the already-public client ID and relay URL); `npm audit
+  --audit-level=high` is now a CI step; repository scoping is unchanged since
+  Phase 2's live-verified pass; JSON export correctness remains covered by
+  `exportDocument.test.ts`/`ExportButton.test.tsx`.
 
 ## 4. Testing approach
 
@@ -749,12 +914,24 @@ render and behave correctly in an actual browser.
     retrieval (bounded, lazy) and restoration; implement active-tree JSON
     export; check off Phase 5.~~ Done — all exit criteria met, on the basis
     described just above (the new `listDocumentHistory` GitHub endpoint is
-    covered by mocked tests only, not yet a live check). Next: Phase 6 (PWA
-    hardening, accessibility, and release) — finalize the manifest, icons,
-    install/update behavior with in-progress-edit preservation, accessibility
-    and responsive testing (screen reader labels, focus management, keyboard-
-    only operation, reduced motion, contrast, touch targets) on real Android
-    Chrome and a Chromium-based desktop browser, and the GitHub Pages release
-    checklist (environment-specific config, CSP, dependency/secret scanning,
-    documented rollback). Before or during Phase 6, also run the live
-    `listDocumentHistory`/`loadDocumentAt` check described just above.
+    covered by mocked tests only, not yet a live check).
+13. ~~Fix the manifest/service-worker base-path bugs; add the safe-refresh
+    update prompt, in-progress-edit (sessionStorage) preservation, offline
+    detection, `ConfirmDialog` focus trap/Escape/restore, focus-after-
+    navigation, reduced-motion/touch-target/skip-link CSS, a CSP `<meta>`
+    tag, CI dependency scanning, and rollback support in the deploy
+    workflow; add Playwright + axe real-browser tests via a dev-only
+    harness.~~ Done, but Phase 6 is **not** checked off — two of its four
+    exit criteria genuinely need a real Android/Ubuntu device and live
+    GitHub credentials this session didn't have; see the Phase 6 narrative
+    and exit criteria above for exactly what's left. Remaining before Phase
+    6 (and the "initial production release" milestone, section 6) can be
+    checked off:
+    - a real install/upgrade/rollback pass on actual Android Chrome and
+      Ubuntu Chromium (this session's e2e suite proves the underlying
+      mechanisms individually; not a substitute for the real thing);
+    - the live two-real-browser-session GitHub acceptance test (design.md 14);
+    - enabling GitHub's repository-level secret scanning/push protection
+      (Settings → Code security — a one-time account action, not code); and
+    - Phase 5's still-outstanding live `listDocumentHistory`/`loadDocumentAt`
+      check, unchanged since that phase's own write-up.

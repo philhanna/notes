@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { MutationError } from "../app/useDocument.ts";
+import { useDraft } from "../app/useDraft.ts";
 import { inferValue } from "../domain/inference.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue } from "../domain/types.ts";
@@ -8,6 +9,7 @@ import { describeError } from "./errors.ts";
 
 interface CreateEntryFormProps {
   isArray: boolean;
+  storageKey: string;
   onCreateEntry: (
     key: string,
     value: JsonValue,
@@ -17,28 +19,33 @@ interface CreateEntryFormProps {
   ) => Promise<Result<JsonObject, MutationError>>;
 }
 
-/** Creates a new object entry or array element at the current level (design.md 7.1). */
+/**
+ * Creates a new object entry or array element at the current level
+ * (design.md 7.1). The typed key/value survive a safe-refresh (design.md
+ * 13) via useDraft, keyed by the current level's `storageKey`.
+ */
 export function CreateEntryForm({
   isArray,
+  storageKey,
   onCreateEntry,
   onCreateElement,
 }: CreateEntryFormProps) {
-  const [key, setKey] = useState("");
-  const [valueText, setValueText] = useState("");
+  const key = useDraft(`create-key:${storageKey}`, "");
+  const valueText = useDraft(`create-value:${storageKey}`, "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const inferred = inferValue(valueText);
+  const inferred = inferValue(valueText.text);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     const result = isArray
       ? await onCreateElement(inferred.value)
-      : await onCreateEntry(key, inferred.value);
+      : await onCreateEntry(key.text, inferred.value);
     setSaving(false);
     if (result.ok) {
-      setKey("");
-      setValueText("");
+      key.clear();
+      valueText.clear();
       setError(null);
     } else {
       setError(describeError(result.error));
@@ -58,8 +65,8 @@ export function CreateEntryForm({
           <label htmlFor="create-entry-key">Key</label>
           <input
             id="create-entry-key"
-            value={key}
-            onChange={(event) => setKey(event.target.value)}
+            value={key.text}
+            onChange={(event) => key.setText(event.target.value)}
           />
         </>
       )}
@@ -67,8 +74,8 @@ export function CreateEntryForm({
       <textarea
         id="create-entry-value"
         rows={2}
-        value={valueText}
-        onChange={(event) => setValueText(event.target.value)}
+        value={valueText.text}
+        onChange={(event) => valueText.setText(event.target.value)}
       />
       <p className="value-editor__inferred">
         Will save as <strong>{inferred.kind}</strong>:{" "}

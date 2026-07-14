@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DocumentState, MutationError } from "../app/useDocument.ts";
-import { resolvePointer } from "../domain/path.ts";
+import { encodePointer, resolvePointer } from "../domain/path.ts";
 import { err } from "../domain/result.ts";
 import type { Result } from "../domain/result.ts";
 import { getAtPath } from "../domain/tree.ts";
@@ -34,9 +34,23 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     restore,
   } = state;
   const [showHistory, setShowHistory] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   const current = getAtPath(document, currentPath);
   const isArray = isJsonArray(current);
+  const levelLabel =
+    currentPath.length === 0
+      ? "Notes"
+      : String(currentPath[currentPath.length - 1]);
+  const pathKey = encodePointer(currentPath);
+
+  // Move focus to the current level's heading after breadcrumb/child
+  // navigation, since there is no router providing a navigation lifecycle
+  // to hook (react-router-dom is listed as a dependency but was never
+  // wired up — view switching is plain useState).
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [pathKey]);
 
   function relocate(
     kind: "move" | "copy",
@@ -59,6 +73,9 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     <div className="tree-browser">
       <div className="tree-browser__header">
         <Breadcrumbs path={currentPath} onNavigate={navigate} />
+        <h2 ref={headingRef} tabIndex={-1} className="tree-browser__heading">
+          {levelLabel}
+        </h2>
         {history && (
           <button type="button" onClick={() => setShowHistory(true)}>
             History for this level
@@ -69,11 +86,7 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
       {showHistory && history && (
         <HistoryPanel
           path={currentPath}
-          label={
-            currentPath.length === 0
-              ? "Notes"
-              : String(currentPath[currentPath.length - 1])
-          }
+          label={levelLabel}
           currentValue={current}
           history={history}
           restore={restore}
@@ -114,6 +127,7 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
 
       <CreateEntryForm
         isArray={isArray}
+        storageKey={encodePointer(currentPath)}
         onCreateEntry={createEntry}
         onCreateElement={createElement}
       />

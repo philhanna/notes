@@ -5,3 +5,5 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 .wrangler/
+test-results/
+playwright-report/

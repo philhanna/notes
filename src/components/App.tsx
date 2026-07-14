@@ -3,8 +3,13 @@ import { loadRepoConfig } from "../auth/repoConfig.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
 import { useAuth } from "../auth/useAuth.ts";
 import { useDocument } from "../app/useDocument.ts";
+import { useOnlineStatus } from "../app/useOnlineStatus.ts";
 import type { JsonObject } from "../domain/types.ts";
 import type { TrashDocument } from "../domain/trash.ts";
+import {
+  activateWaitingServiceWorker,
+  registerServiceWorker,
+} from "../pwa/registerServiceWorker.ts";
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
@@ -38,6 +43,12 @@ type LoadState =
 export function App() {
   const auth = useAuth();
   const [state, setState] = useState<LoadState>({ phase: "idle" });
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const isOnline = useOnlineStatus();
+
+  useEffect(() => {
+    registerServiceWorker(() => setUpdateAvailable(true));
+  }, []);
 
   useEffect(() => {
     if (auth.status !== "signed-in") {
@@ -78,63 +89,70 @@ export function App() {
     };
   }, [auth.status, auth.getAccessToken]);
 
+  let body;
   if (auth.status !== "signed-in") {
-    return (
-      <main>
-        <h1>Notes</h1>
-        <SignIn auth={auth} />
-      </main>
+    body = <SignIn auth={auth} />;
+  } else if (state.phase === "setup") {
+    body = (
+      <Setup
+        auth={auth}
+        onReady={(config, loaded) => {
+          setState({
+            phase: "ready",
+            config,
+            repository: createGithubRepository(config, auth.getAccessToken),
+            document: loaded.document,
+            trash: loaded.trash,
+            sha: loaded.sha,
+          });
+        }}
+      />
     );
-  }
-
-  if (state.phase === "setup") {
-    return (
-      <main>
-        <h1>Notes</h1>
-        <Setup
-          auth={auth}
-          onReady={(config, loaded) => {
-            setState({
-              phase: "ready",
-              config,
-              repository: createGithubRepository(config, auth.getAccessToken),
-              document: loaded.document,
-              trash: loaded.trash,
-              sha: loaded.sha,
-            });
-          }}
-        />
-      </main>
-    );
-  }
-
-  if (state.phase === "error") {
-    return (
-      <main>
-        <h1>Notes</h1>
+  } else if (state.phase === "error") {
+    body = (
+      <>
         <p role="alert">{state.message}</p>
         <button type="button" onClick={auth.signOut}>
           Sign out
         </button>
-      </main>
+      </>
     );
-  }
-
-  if (state.phase !== "ready") {
-    return (
-      <main>
-        <h1>Notes</h1>
-        <p>Loading…</p>
-      </main>
+  } else if (state.phase !== "ready") {
+    body = <p>Loading…</p>;
+  } else {
+    body = (
+      <ReadyApp
+        key={`${state.config.owner}/${state.config.repo}`}
+        state={state}
+        onSignOut={auth.signOut}
+      />
     );
   }
 
   return (
-    <ReadyApp
-      key={`${state.config.owner}/${state.config.repo}`}
-      state={state}
-      onSignOut={auth.signOut}
-    />
+    <>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <main id="main-content">
+        <h1>Notes</h1>
+        {!isOnline && (
+          <p className="status-banner status-banner--offline" role="status">
+            You&rsquo;re offline. Sign-in and saving need an internet
+            connection.
+          </p>
+        )}
+        {updateAvailable && (
+          <p className="status-banner status-banner--update" role="status">
+            An update is available.{" "}
+            <button type="button" onClick={activateWaitingServiceWorker}>
+              Reload
+            </button>
+          </p>
+        )}
+        {body}
+      </main>
+    </>
   );
 }
 
@@ -152,8 +170,7 @@ function ReadyApp({
   });
   const [view, setView] = useState<"tree" | "trash" | "search">("tree");
   return (
-    <main>
-      <h1>Notes</h1>
+    <>
       <button type="button" onClick={onSignOut}>
         Sign out
       </button>
@@ -186,6 +203,6 @@ function ReadyApp({
         />
       )}
       {view === "tree" && <TreeBrowser state={documentState} />}
-    </main>
+    </>
   );
 }

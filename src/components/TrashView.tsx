@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { DocumentState } from "../app/useDocument.ts";
 import { resolvePointer } from "../domain/path.ts";
@@ -33,6 +33,14 @@ export function TrashView({
   const [error, setError] = useState<string | null>(null);
   const [confirmingEmpty, setConfirmingEmpty] = useState(false);
   const [emptying, setEmptying] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Focus the heading on mount: this view only mounts when the user
+  // switches to it (see App.tsx), so this is that switch's navigation
+  // focus target (no router lifecycle exists to hook instead).
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   async function handleEmptyTrash() {
     setEmptying(true);
@@ -45,7 +53,9 @@ export function TrashView({
   return (
     <div className="trash-view">
       <div className="trash-view__header">
-        <h2>Trash</h2>
+        <h2 ref={headingRef} tabIndex={-1}>
+          Trash
+        </h2>
         <button type="button" onClick={onClose}>
           Back to notes
         </button>
