@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <body>
+    <div id="out">pending</div>
+    <script>
+      async function check(label, url, options) {
+        try {
+          const res = await fetch(url, options);
+          const body = await res.text();
+          return `${label}: OK status=${res.status} body=${body.slice(0, 80)}`;
+        } catch (e) {
+          return `${label}: ERROR ${e.name}: ${e.message}`;
+        }
+      }
+      (async () => {
+        const results = [];
+        results.push(
+          await check(
+            "direct-device-code",
+            "https://github.com/login/device/code",
+            {
+              method: "POST",
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: "client_id=Iv23liBOOsS7SnBaH9d2",
+            },
+          ),
+        );
+        results.push(
+          await check(
+            "via-relay-device-code",
+            "http://localhost:8788/device/code",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: "client_id=Iv23liBOOsS7SnBaH9d2",
+            },
+          ),
+        );
+        results.push(
+          await check(
+            "api.github.com",
+            "https://api.github.com/repos/philhanna/notes-data",
+            { headers: { Authorization: "Bearer dummy" } },
+          ),
+        );
+        document.getElementById("out").textContent = results.join(" ||| ");
+        document.title = "DONE";
+      })();
+    </script>
+  </body>
+</html>

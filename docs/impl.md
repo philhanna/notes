@@ -12,10 +12,14 @@ GitHub App (device flow enabled, Contents: Read and write, installed only on
 that repository) exist and were used to run spikes 1–3 successfully. Spike 4
 found that device flow's two `github.com` endpoints do not support browser
 CORS — see `docs/design.md` section 3.4 for the resolution (a minimal
-stateless auth relay), verified locally but not yet deployed. Remaining before
-Phase 0 can be checked off: deploy the relay for real, rerun spike 4 against
-the deployed Pages origin, and confirm the other Phase 0 exit criteria (CI,
-secret scanning).
+stateless auth relay). The relay is now deployed for real (Cloudflare
+Worker, `https://notes-auth-relay-spike.ph1204.workers.dev`), the app's
+source repository (`philhanna/notes`) was made public per `docs/design.md`
+section 3.3 (it contains no secrets or note data) and deployed to GitHub
+Pages at `https://philhanna.github.io/notes/`, and spike 4 was rerun from
+that real deployed origin against the real deployed relay — confirmed, see
+`spikes/fixtures/04-cors.json`. Remaining before Phase 0 can be checked off:
+a secret/dependency scan over the current scaffold.
 
 - [ ] Phase 0 — Project foundation and risk spikes
 - [ ] Phase 1 — Domain model and local tree browser
@@ -117,9 +121,14 @@ Before proceeding, prove the following against a disposable private repository:
    forward`, distinct in status and body from a `401 Bad credentials` auth
    failure.
 4. Required GitHub API calls, and the auth relay, work from the deployed Pages
-   origin under browser CORS rules. **Not yet done** — proven so far only from
-   a local stand-in origin, not the real deployed GitHub Pages origin plus a
-   deployed (not just locally-run) relay.
+   origin under browser CORS rules. **Result: confirmed** — rerun from
+   `https://philhanna.github.io/notes/` in a real browser against the real
+   deployed relay: the direct `github.com/login/device/code` call was still
+   CORS-blocked as expected, the same call through the deployed relay
+   returned `200 OK` with a real `device_code`/`user_code`, and a direct
+   `api.github.com` call reached GitHub without a CORS error (a `401 Bad
+   credentials` response, not a blocked request). See
+   `spikes/fixtures/04-cors.json`.
 
 Use the Git Data API for multi-file writes; the Contents API alone cannot make
 the active document and trash update one atomic commit. Capture request/response
@@ -132,7 +141,7 @@ Exit criteria:
 
 - [x] lint, type-check, unit test, build, and a smoke test run in CI;
 - [x] the app installs locally as a PWA and shows no note data while signed out;
-- [ ] a documented spike demonstrates private-repository read and conditional,
+- [x] a documented spike demonstrates private-repository read and conditional,
   atomic write from the deployed origin, including the auth relay actually
   deployed (not just run locally); and
 - [ ] secrets and tokens are absent from source, build artifacts, URLs, and logs.
@@ -356,9 +365,13 @@ ignored: `spikes/.local/` holds the live token, never committed). Spike 4
 found that device flow's two `github.com` endpoints reject cross-origin
 browser calls (no CORS headers) — confirmed by both inspecting response
 headers and reproducing the failure in a real headless-browser `fetch()` —
-and that a minimal stateless relay fixes it, verified locally under
-`wrangler dev`. `docs/design.md` section 3.4 records this as the corrected
-design assumption.
+and that a minimal stateless relay fixes it. `docs/design.md` section 3.4
+records this as the corrected design assumption. The relay is now deployed
+(Cloudflare Worker, `https://notes-auth-relay-spike.ph1204.workers.dev`) and
+the PWA shell is deployed to GitHub Pages (`https://philhanna.github.io/notes/`,
+built by `.github/workflows/deploy-pages.yml`); spike 4 was rerun from that
+real origin against the real relay and passed, redacted result in
+`spikes/fixtures/04-cors.json`.
 
 Do not treat any further GitHub integration claim in this plan as verified by
 reasoning or by reading GitHub's docs alone — the CORS finding above is a
@@ -370,16 +383,14 @@ surfaced by making the actual calls from a real browser.
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
 2. ~~Register a GitHub App and create a disposable private repository.~~ Done
    (`philhanna/notes-data`; app installed on it only).
-3. ~~Run and document spikes 1–3.~~ Done, passed. Spike 4 (CORS from the
-   deployed Pages origin) is partially done: the failure is confirmed and a
-   fix is verified locally, but not yet from a real deployed origin.
-4. Deploy the auth relay for real (a Cloudflare Worker or equivalent, holding
-   no secret) and redeploy/host the PWA shell (even a throwaway GitHub Pages
-   deployment is enough for this spike). **This requires your explicit
-   approval before creating or configuring either one**, the same as step 2
-   did. Rerun spike 4 from that real origin.
+3. ~~Run and document spikes 1–3.~~ Done, passed.
+4. ~~Deploy the auth relay for real and redeploy/host the PWA shell; rerun
+   spike 4 from that real origin.~~ Done. Relay deployed to Cloudflare
+   Workers; `philhanna/notes` (the app's source repository, not the data
+   repository) made public per `docs/design.md` section 3.3 and deployed to
+   GitHub Pages; spike 4 rerun from `https://philhanna.github.io/notes/`
+   against the deployed relay and passed.
 5. Run a secret/dependency scan over the current scaffold and confirm no
    secrets or tokens appear in source, build artifacts, URLs, or logs.
-6. Only after spike 4 passes from the real deployed origin and the rest of
-   Phase 0's exit criteria are met, check off Phase 0 above, then proceed to
-   Phase 1 (domain model and local tree browser).
+6. Only after the rest of Phase 0's exit criteria are met, check off Phase 0
+   above, then proceed to Phase 1 (domain model and local tree browser).

@@ -1,0 +1,8 @@
+{
+  "branch": "main",
+  "baseCommitSha": "6b2d5f8a67f78e59ac45408bf83b86f226d393f0",
+  "newTreeSha": "fe84989995527c7a374f9ba4afc7dccffaf73dd2",
+  "newCommitSha": "ba1d5316e4e9eeda65cdbf76380df6b46be0cb31",
+  "refUpdateStatus": 200,
+  "filesInCommit": [".trash", ".trash/trash.json", "README.md", "remember.json"]
+}

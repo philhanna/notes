@@ -1,0 +1,16 @@
+{
+  "branch": "main",
+  "baseCommitSha": "ba1d5316e4e9eeda65cdbf76380df6b46be0cb31",
+  "writerA": {
+    "commitSha": "abed07b61ec63486b2ac8ab87ac8154ca1107ed6",
+    "refUpdateStatus": 200
+  },
+  "writerB": {
+    "commitSha": "e581854b8c98a33af1e169fed49110addfa62fc4",
+    "refUpdateStatus": 422,
+    "refUpdateMessage": "Update is not a fast forward"
+  },
+  "authFailureStatus": 401,
+  "authFailureMessage": "Bad credentials",
+  "conclusion": "stale write rejected distinctly from auth failure"
+}
