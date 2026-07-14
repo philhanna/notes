@@ -76,23 +76,7 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
         <h2 ref={headingRef} tabIndex={-1} className="tree-browser__heading">
           {levelLabel}
         </h2>
-        {history && (
-          <button type="button" onClick={() => setShowHistory(true)}>
-            History for this level
-          </button>
-        )}
       </div>
-
-      {showHistory && history && (
-        <HistoryPanel
-          path={currentPath}
-          label={levelLabel}
-          currentValue={current}
-          history={history}
-          restore={restore}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
 
       {children.length === 0 ? (
         <p className="tree-browser__empty">This level is empty.</p>
@@ -131,6 +115,27 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
         onCreateEntry={createEntry}
         onCreateElement={createElement}
       />
+
+      {history && (
+        <button
+          type="button"
+          className="tree-browser__history"
+          onClick={() => setShowHistory(true)}
+        >
+          History
+        </button>
+      )}
+
+      {showHistory && history && (
+        <HistoryPanel
+          path={currentPath}
+          label={levelLabel}
+          currentValue={current}
+          history={history}
+          restore={restore}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
   );
 }
