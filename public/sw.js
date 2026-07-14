@@ -1,6 +1,6 @@
 // Caches only the static application shell. Never cache GitHub API
 // responses, tokens, or note content — see docs/design.md section 3.1.
-const SHELL_CACHE = "notes-shell-v4";
+const SHELL_CACHE = "notes-shell-v5";
 
 // Derived from this file's own URL rather than hardcoded, so it stays
 // correct under whatever base path the app is deployed at (e.g. "/notes/"
@@ -10,6 +10,8 @@ const SHELL_URLS = [
   BASE_PATH,
   `${BASE_PATH}manifest.json`,
   `${BASE_PATH}nature-herb.png`,
+  `${BASE_PATH}nature-herb-192.png`,
+  `${BASE_PATH}nature-herb-512.png`,
 ];
 const ASSETS_PATH = `${BASE_PATH}assets/`;
 

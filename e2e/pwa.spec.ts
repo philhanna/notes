@@ -48,6 +48,32 @@ test("registers a service worker that caches the shell for offline use", async (
   await context.setOffline(false);
 });
 
+test("provides Android-sized install icons in the web app manifest", async ({
+  page,
+}) => {
+  await page.goto("/notes/");
+
+  const manifest = await page.evaluate(async () => {
+    const response = await fetch("/notes/manifest.json");
+    return response.json();
+  });
+
+  expect(manifest.icons).toEqual([
+    {
+      src: "/notes/nature-herb-192.png",
+      sizes: "192x192",
+      type: "image/png",
+      purpose: "any",
+    },
+    {
+      src: "/notes/nature-herb-512.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "any",
+    },
+  ]);
+});
+
 test("shows no note content while signed out, even offline after a fresh launch", async ({
   page,
   context,
