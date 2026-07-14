@@ -54,7 +54,9 @@ describe("History and restore (design.md 10)", () => {
     await user.click(initialEntry);
 
     // Preview shows the historical value but does not change the live tree.
-    expect(screen.getByText("Selected revision")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Selected revision" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/"v1"/).length).toBeGreaterThan(0);
     expect(screen.getByText('"v2"')).toBeInTheDocument(); // still the current value in the row behind the panel
     expect(repository.commits).toHaveLength(1); // no commit made just from previewing

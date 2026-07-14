@@ -3,6 +3,7 @@ import type { DocumentState } from "../app/useDocument.ts";
 import type { HistoryRevision } from "../app/history.ts";
 import type { JsonValue, Path } from "../domain/types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { JsonTreeView } from "./JsonTreeView.tsx";
 import { describeError, describePersistError } from "./errors.ts";
 
 interface HistoryPanelProps {
@@ -122,11 +123,19 @@ export function HistoryPanel({
         <div className="history-preview">
           <div>
             <h3>Selected revision</h3>
-            <pre>{JSON.stringify(selected.value, null, 2) ?? "(removed)"}</pre>
+            <JsonTreeView
+              rootLabel="Selected revision"
+              value={selected.value}
+              emptyLabel="(removed)"
+            />
           </div>
           <div>
             <h3>Current</h3>
-            <pre>{JSON.stringify(currentValue, null, 2) ?? "(none)"}</pre>
+            <JsonTreeView
+              rootLabel="Current"
+              value={currentValue}
+              emptyLabel="(none)"
+            />
           </div>
           <button
             type="button"

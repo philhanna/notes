@@ -5,11 +5,12 @@ import { encodePointer } from "../domain/path.ts";
 import type { ChildEntry } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
-import { isContainer, isJsonArray, isJsonObject } from "../domain/types.ts";
+import { isContainer } from "../domain/types.ts";
 import { ValueEditor } from "./ValueEditor.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { HistoryPanel } from "./HistoryPanel.tsx";
 import { describeError } from "./errors.ts";
+import { describeContainer } from "./containerLabel.ts";
 
 interface ChildRowProps {
   entry: ChildEntry;
@@ -351,10 +352,4 @@ export function ChildRow({
       )}
     </li>
   );
-}
-
-function describeContainer(value: JsonValue): string {
-  if (isJsonArray(value)) return `array (${value.length})`;
-  if (isJsonObject(value)) return `object (${Object.keys(value).length})`;
-  return "";
 }
