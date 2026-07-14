@@ -18,15 +18,6 @@ function Harness() {
   return <TreeBrowser state={state} />;
 }
 
-function HistoryHarness() {
-  const state = useDocument(sample());
-  const stateWithHistory = {
-    ...state,
-    history: async () => ({ ok: true, value: [] }),
-  } satisfies typeof state;
-  return <TreeBrowser state={stateWithHistory} />;
-}
-
 async function openActions(
   user: ReturnType<typeof userEvent.setup>,
   row: HTMLElement,
@@ -36,18 +27,6 @@ async function openActions(
 }
 
 describe("TreeBrowser", () => {
-  it("puts the level history at the bottom and labels it History", () => {
-    const { container } = render(<HistoryHarness />);
-
-    const browser = container.querySelector(".tree-browser")!;
-    const historyButton = browser.querySelector(".tree-browser__history");
-    expect(browser.lastElementChild).toBe(historyButton);
-    expect(historyButton).toHaveTextContent("History");
-    expect(
-      screen.queryByRole("button", { name: "History for this level" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("navigates into a container via breadcrumbs and back", async () => {
     const user = userEvent.setup();
     render(<Harness />);

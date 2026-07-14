@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { DocumentState, MutationError } from "../app/useDocument.ts";
 import { encodePointer, resolvePointer } from "../domain/path.ts";
 import { err } from "../domain/result.ts";
@@ -9,7 +9,6 @@ import { isJsonArray } from "../domain/types.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { ChildRow } from "./ChildRow.tsx";
 import { CreateEntryForm } from "./CreateEntryForm.tsx";
-import { HistoryPanel } from "./HistoryPanel.tsx";
 
 interface TreeBrowserProps {
   state: DocumentState;
@@ -33,7 +32,6 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     history,
     restore,
   } = state;
-  const [showHistory, setShowHistory] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const current = getAtPath(document, currentPath);
@@ -116,26 +114,6 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
         onCreateElement={createElement}
       />
 
-      {history && (
-        <button
-          type="button"
-          className="tree-browser__history"
-          onClick={() => setShowHistory(true)}
-        >
-          History
-        </button>
-      )}
-
-      {showHistory && history && (
-        <HistoryPanel
-          path={currentPath}
-          label={levelLabel}
-          currentValue={current}
-          history={history}
-          restore={restore}
-          onClose={() => setShowHistory(false)}
-        />
-      )}
     </div>
   );
 }
