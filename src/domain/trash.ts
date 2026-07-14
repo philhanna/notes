@@ -3,7 +3,11 @@ import { isJsonArray, isJsonObject, kindOf } from "./types.ts";
 import type { Result } from "./result.ts";
 import { err, ok } from "./result.ts";
 import { findExistingKey } from "./keys.ts";
-import { decodePointerSegments, encodePointer, resolvePointerSegments } from "./path.ts";
+import {
+  decodePointerSegments,
+  encodePointer,
+  resolvePointerSegments,
+} from "./path.ts";
 import type { TreeError } from "./tree.ts";
 import {
   createObjectEntry,
@@ -35,7 +39,10 @@ export interface TrashDocument {
   records: TrashRecord[];
 }
 
-export const EMPTY_TRASH: TrashDocument = { version: TRASH_SCHEMA_VERSION, records: [] };
+export const EMPTY_TRASH: TrashDocument = {
+  version: TRASH_SCHEMA_VERSION,
+  records: [],
+};
 
 /**
  * Removes the entry at `path` from the active tree and appends one complete
@@ -131,7 +138,12 @@ function insertAtOriginalPath(
     return createObjectEntry(document, parentPath, leaf, record.value);
   }
   if (isJsonArray(parent)) {
-    return insertArrayElementAt(document, parentPath, Number(leaf), record.value);
+    return insertArrayElementAt(
+      document,
+      parentPath,
+      Number(leaf),
+      record.value,
+    );
   }
   return err({ kind: "destination-required" });
 }
@@ -159,6 +171,26 @@ export function emptyTrash(trash: TrashDocument): TrashDocument {
   return { version: trash.version, records: [] };
 }
 
+/**
+ * The IDs of trash records added or removed between `before` and `after`
+ * (Phase 4's conflict detection). Trash records are identified by ID, not
+ * position, so this reports which specific records changed rather than
+ * treating any change to the records array as a blanket conflict — two
+ * devices deleting different entries concurrently should not conflict with
+ * each other.
+ */
+export function changedTrashIds(
+  before: TrashDocument,
+  after: TrashDocument,
+): string[] {
+  const beforeIds = new Set(before.records.map((record) => record.id));
+  const afterIds = new Set(after.records.map((record) => record.id));
+  const changed = new Set<string>();
+  for (const id of beforeIds) if (!afterIds.has(id)) changed.add(id);
+  for (const id of afterIds) if (!beforeIds.has(id)) changed.add(id);
+  return [...changed];
+}
+
 export type TrashParseError =
   | { kind: "syntax"; message: string }
   | { kind: "invalid-root" }
@@ -170,7 +202,9 @@ export function serializeTrash(trash: TrashDocument): string {
   return JSON.stringify(trash, null, 2) + "\n";
 }
 
-export function parseTrash(text: string): Result<TrashDocument, TrashParseError> {
+export function parseTrash(
+  text: string,
+): Result<TrashDocument, TrashParseError> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -215,13 +249,18 @@ export function validateTrash(
     return err({ kind: "invalid-root" });
   }
   const { version, records } = value as { version: unknown; records: unknown };
-  if (version !== TRASH_SCHEMA_VERSION) return err({ kind: "unsupported-version" });
+  if (version !== TRASH_SCHEMA_VERSION)
+    return err({ kind: "unsupported-version" });
   if (!Array.isArray(records)) return err({ kind: "invalid-root" });
 
   for (let index = 0; index < records.length; index++) {
-    if (!isValidRecord(records[index])) return err({ kind: "invalid-record", index });
+    if (!isValidRecord(records[index]))
+      return err({ kind: "invalid-record", index });
   }
-  return ok({ version: TRASH_SCHEMA_VERSION, records: records as TrashRecord[] });
+  return ok({
+    version: TRASH_SCHEMA_VERSION,
+    records: records as TrashRecord[],
+  });
 }
 
 function isValidRecord(value: unknown): value is TrashRecord {

@@ -132,7 +132,10 @@ describe("loadDocument", () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const path = url.replace("https://api.github.com", "");
       if (path.match(/\/git\/blobs\/blob-1$/)) {
-        return fakeResponse(200, { content: btoa("not json"), encoding: "base64" });
+        return fakeResponse(200, {
+          content: btoa("not json"),
+          encoding: "base64",
+        });
       }
       return graph.handle(url, init);
     });
@@ -145,7 +148,10 @@ describe("loadDocument", () => {
   });
 
   it("reports malformed when a present trash file fails schema validation", async () => {
-    const graph = createFakeGraph({ hardinfo: "x" }, { version: 1, records: [] });
+    const graph = createFakeGraph(
+      { hardinfo: "x" },
+      { version: 1, records: [] },
+    );
     const fetchMock = installFetch(graph);
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const path = url.replace("https://api.github.com", "");
@@ -256,7 +262,10 @@ describe("ensureDocument", () => {
         return fakeResponse(201, { sha: commitSha });
       }
       if (method === "POST" && path.endsWith("/git/refs")) {
-        const body = JSON.parse(init!.body as string) as { ref: string; sha: string };
+        const body = JSON.parse(init!.body as string) as {
+          ref: string;
+          sha: string;
+        };
         expect(body.ref).toBe("refs/heads/main");
         expect(body.sha).toBe(commitSha);
         refCreated = true;
@@ -270,7 +279,11 @@ describe("ensureDocument", () => {
     const result = await repository.ensureDocument();
     expect(result).toEqual({
       ok: true,
-      value: { document: {}, trash: { version: 1, records: [] }, sha: "commit-1" },
+      value: {
+        document: {},
+        trash: { version: 1, records: [] },
+        sha: "commit-1",
+      },
     });
     expect(refCreated).toBe(true);
   });
@@ -284,7 +297,10 @@ describe("save", () => {
     const repository = createGithubRepository(config, okToken);
     const baseSha = graph.getHead()!;
     const result = await repository.save(
-      { document: { "where-was-i": "here" }, trash: { version: 1, records: [] } },
+      {
+        document: { "where-was-i": "here" },
+        trash: { version: 1, records: [] },
+      },
       baseSha,
       { kind: "set-value", path: ["where-was-i"] },
     );
@@ -297,7 +313,9 @@ describe("save", () => {
         (call[0] as string).endsWith("/git/commits"),
     );
     expect(commitCall).toBeDefined();
-    const commitBody = JSON.parse((commitCall![1] as RequestInit).body as string) as {
+    const commitBody = JSON.parse(
+      (commitCall![1] as RequestInit).body as string,
+    ) as {
       message: string;
     };
     expect(commitBody.message).toBe("Set /where-was-i");
@@ -307,7 +325,9 @@ describe("save", () => {
         (call[1] as RequestInit | undefined)?.method === "POST" &&
         (call[0] as string).endsWith("/git/trees"),
     );
-    const treeBody = JSON.parse((treeCall![1] as RequestInit).body as string) as {
+    const treeBody = JSON.parse(
+      (treeCall![1] as RequestInit).body as string,
+    ) as {
       tree: { path: string; sha: string }[];
     };
     expect(treeBody.tree.map((e) => e.path)).toEqual(["remember.json"]);
@@ -343,7 +363,9 @@ describe("save", () => {
         (call[1] as RequestInit | undefined)?.method === "POST" &&
         (call[0] as string).endsWith("/git/trees"),
     );
-    const treeBody = JSON.parse((treeCall![1] as RequestInit).body as string) as {
+    const treeBody = JSON.parse(
+      (treeCall![1] as RequestInit).body as string,
+    ) as {
       tree: { path: string; sha: string }[];
     };
     expect(treeBody.tree.map((e) => e.path).sort()).toEqual([
@@ -369,7 +391,9 @@ describe("save", () => {
         (call[1] as RequestInit | undefined)?.method === "POST" &&
         (call[0] as string).endsWith("/git/trees"),
     );
-    const treeBody = JSON.parse((treeCall![1] as RequestInit).body as string) as {
+    const treeBody = JSON.parse(
+      (treeCall![1] as RequestInit).body as string,
+    ) as {
       tree: { path: string; sha: string }[];
     };
     expect(treeBody.tree.map((e) => e.path)).toEqual(["remember.json"]);
@@ -439,5 +463,109 @@ describe("save", () => {
       { kind: "set-value", path: ["a"] },
     );
     expect(result).toEqual({ ok: false, error: { kind: "network" } });
+  });
+
+  // Phase 4 (design.md 7.4): "after an uncertain network response, reread
+  // the branch head ... before retrying so the same user action does not
+  // create duplicate commits." These three cases cover an uncertain outcome
+  // specifically at the final ref-update step, where the response — not
+  // necessarily the write itself — can be lost.
+  describe("an uncertain ref-update outcome", () => {
+    it("adopts the commit as successful when it landed but the response was lost", async () => {
+      const graph = createFakeGraph({ hardinfo: "old" });
+      const baseSha = graph.getHead()!;
+      let patchAttempts = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const path = url.replace("https://api.github.com", "");
+          const method = (init?.method as string | undefined) ?? "GET";
+          if (method === "PATCH" && path.endsWith("/git/refs/heads/main")) {
+            patchAttempts += 1;
+            await graph.handle(url, init); // the write really lands server-side...
+            throw new TypeError("Failed to fetch"); // ...but the client never sees the response.
+          }
+          return graph.handle(url, init);
+        }),
+      );
+
+      const repository = createGithubRepository(config, okToken);
+      const result = await repository.save(
+        { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
+        baseSha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.sha).toBe(graph.getHead());
+      expect(patchAttempts).toBe(1); // no duplicate write was attempted
+    });
+
+    it("reports the original network error when the write never reached the server", async () => {
+      const graph = createFakeGraph({ hardinfo: "old" });
+      const baseSha = graph.getHead()!;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const path = url.replace("https://api.github.com", "");
+          const method = (init?.method as string | undefined) ?? "GET";
+          if (method === "PATCH" && path.endsWith("/git/refs/heads/main")) {
+            throw new TypeError("Failed to fetch");
+          }
+          return graph.handle(url, init);
+        }),
+      );
+
+      const repository = createGithubRepository(config, okToken);
+      const result = await repository.save(
+        { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
+        baseSha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      expect(result).toEqual({ ok: false, error: { kind: "network" } });
+      expect(graph.getHead()).toBe(baseSha); // confirmed nothing landed
+    });
+
+    it("reports conflict, not a duplicate commit, when another write landed during the uncertain window", async () => {
+      const graph = createFakeGraph({ hardinfo: "old" });
+      const baseSha = graph.getHead()!;
+
+      // A second device's write lands first, on the same base.
+      installFetch(graph);
+      const otherDevice = createGithubRepository(config, okToken);
+      const otherResult = await otherDevice.save(
+        {
+          document: { hardinfo: "from another device" },
+          trash: { version: 1, records: [] },
+        },
+        baseSha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      expect(otherResult.ok).toBe(true);
+      const headAfterOtherDevice = graph.getHead();
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const path = url.replace("https://api.github.com", "");
+          const method = (init?.method as string | undefined) ?? "GET";
+          if (method === "PATCH" && path.endsWith("/git/refs/heads/main")) {
+            throw new TypeError("Failed to fetch");
+          }
+          return graph.handle(url, init);
+        }),
+      );
+
+      const repository = createGithubRepository(config, okToken);
+      const result = await repository.save(
+        {
+          document: { hardinfo: "my update" },
+          trash: { version: 1, records: [] },
+        },
+        baseSha, // the now-stale original base
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      expect(result).toEqual({ ok: false, error: { kind: "conflict" } });
+      expect(graph.getHead()).toBe(headAfterOtherDevice); // the other device's write is still the only one that landed
+    });
   });
 });

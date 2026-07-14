@@ -16,8 +16,8 @@ export type Operation =
   | { kind: "move"; path: Path; newPath: Path }
   | { kind: "copy"; path: Path; newPath: Path }
   | { kind: "delete"; path: Path }
-  | { kind: "recover"; path: Path }
-  | { kind: "permanent-delete"; path: Path }
+  | { kind: "recover"; path: Path; trashId: string }
+  | { kind: "permanent-delete"; path: Path; trashId: string }
   | { kind: "empty-trash" };
 
 export interface RepositoryCheck {

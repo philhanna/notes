@@ -16,7 +16,9 @@
       "Bash(echo \"TSC_EXIT=$?\")",
       "Bash(npm run *)",
       "Bash(echo \"LINT_EXIT=$?\")",
-      "Bash(pkill -f \"vite --port 5199\")"
+      "Bash(pkill -f \"vite --port 5199\")",
+      "Bash(git stash *)",
+      "Bash(npx prettier *)"
     ]
   }
 }

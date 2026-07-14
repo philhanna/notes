@@ -56,14 +56,22 @@ describe("describeOperation", () => {
   });
 
   it("describes delete, recover, and permanent-delete by original path", () => {
-    expect(
-      describeOperation({ kind: "delete", path: ["with-rating"] }),
-    ).toBe("Delete /with-rating");
-    expect(describeOperation({ kind: "recover", path: ["with-rating"] })).toBe(
-      "Restore /with-rating from trash",
+    expect(describeOperation({ kind: "delete", path: ["with-rating"] })).toBe(
+      "Delete /with-rating",
     );
     expect(
-      describeOperation({ kind: "permanent-delete", path: ["with-rating"] }),
+      describeOperation({
+        kind: "recover",
+        path: ["with-rating"],
+        trashId: "t1",
+      }),
+    ).toBe("Restore /with-rating from trash");
+    expect(
+      describeOperation({
+        kind: "permanent-delete",
+        path: ["with-rating"],
+        trashId: "t1",
+      }),
     ).toBe("Permanently delete /with-rating");
   });
 

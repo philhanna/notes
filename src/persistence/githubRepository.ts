@@ -82,7 +82,11 @@ export function createGithubRepository(
       if (!headResult.ok) return headResult;
       const headSha = headResult.value;
 
-      const treeShaResult = await getCommitTreeSha(config, accessToken, headSha);
+      const treeShaResult = await getCommitTreeSha(
+        config,
+        accessToken,
+        headSha,
+      );
       if (!treeShaResult.ok) return treeShaResult;
 
       const entriesResult = await getTreeEntries(
@@ -93,7 +97,9 @@ export function createGithubRepository(
       if (!entriesResult.ok) return entriesResult;
       const entries = entriesResult.value;
 
-      const documentEntry = entries.find((entry) => entry.path === DOCUMENT_PATH);
+      const documentEntry = entries.find(
+        (entry) => entry.path === DOCUMENT_PATH,
+      );
       if (!documentEntry) return err({ kind: "not-found" });
       const documentTextResult = await getBlobText(
         config,
@@ -165,15 +171,28 @@ export function createGithubRepository(
           headResult.value,
         );
         if (!commitResult.ok) return commitResult;
-        const refResult = await updateRef(config, accessToken, commitResult.value);
+        const refResult = await updateRef(
+          config,
+          accessToken,
+          commitResult.value,
+        );
         if (!refResult.ok) return refResult;
-        return ok({ document: {}, trash: EMPTY_TRASH, sha: commitResult.value });
+        return ok({
+          document: {},
+          trash: EMPTY_TRASH,
+          sha: commitResult.value,
+        });
       }
 
       // No commits at all yet — a brand-new repository created with no
       // initial README. There is no existing tree/ref to build on.
       if (headResult.error.kind !== "not-found") return headResult;
-      const treeResult = await createTree(config, accessToken, undefined, entries);
+      const treeResult = await createTree(
+        config,
+        accessToken,
+        undefined,
+        entries,
+      );
       if (!treeResult.ok) return treeResult;
       const commitResult = await createCommit(
         config,
@@ -183,7 +202,11 @@ export function createGithubRepository(
         null,
       );
       if (!commitResult.ok) return commitResult;
-      const refResult = await createRef(config, accessToken, commitResult.value);
+      const refResult = await createRef(
+        config,
+        accessToken,
+        commitResult.value,
+      );
       if (!refResult.ok) return refResult;
       return ok({ document: {}, trash: EMPTY_TRASH, sha: commitResult.value });
     });
@@ -195,11 +218,19 @@ export function createGithubRepository(
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>> {
     return withToken(async (accessToken) => {
-      const treeShaResult = await getCommitTreeSha(config, accessToken, baseSha);
+      const treeShaResult = await getCommitTreeSha(
+        config,
+        accessToken,
+        baseSha,
+      );
       if (!treeShaResult.ok) return treeShaResult;
       const baseTreeSha = treeShaResult.value;
 
-      const baseEntriesResult = await getTreeEntries(config, accessToken, baseTreeSha);
+      const baseEntriesResult = await getTreeEntries(
+        config,
+        accessToken,
+        baseTreeSha,
+      );
       if (!baseEntriesResult.ok) return baseEntriesResult;
       const hadTrashFile = baseEntriesResult.value.some(
         (entry) => entry.path === TRASH_PATH,
@@ -228,7 +259,12 @@ export function createGithubRepository(
         entries.push({ path: TRASH_PATH, sha: trashBlobResult.value });
       }
 
-      const treeResult = await createTree(config, accessToken, baseTreeSha, entries);
+      const treeResult = await createTree(
+        config,
+        accessToken,
+        baseTreeSha,
+        entries,
+      );
       if (!treeResult.ok) return treeResult;
       const commitResult = await createCommit(
         config,
@@ -238,9 +274,28 @@ export function createGithubRepository(
         baseSha,
       );
       if (!commitResult.ok) return commitResult;
-      const refResult = await updateRef(config, accessToken, commitResult.value);
-      if (!refResult.ok) return refResult;
-      return ok({ sha: commitResult.value });
+      const refResult = await updateRef(
+        config,
+        accessToken,
+        commitResult.value,
+      );
+      if (refResult.ok) return ok({ sha: commitResult.value });
+      if (refResult.error.kind !== "network") return refResult;
+
+      // The ref update's outcome is uncertain (design.md 7.4, Phase 4:
+      // "after an uncertain network response, reread the branch head ...
+      // before retrying so the same user action does not create duplicate
+      // commits"). The commit this attempt would have advanced the branch
+      // to is already known locally (`commitResult.value`), so comparing it
+      // against the current head settles whether the write actually landed
+      // without needing a client-generated operation ID.
+      const headAfter = await getHeadCommitSha(config, accessToken);
+      if (!headAfter.ok) return refResult;
+      if (headAfter.value === commitResult.value) {
+        return ok({ sha: commitResult.value }); // it landed; only the response was lost
+      }
+      if (headAfter.value === baseSha) return refResult; // it never landed; safe to retry
+      return err({ kind: "conflict" }); // someone else's write landed first
     });
   }
 

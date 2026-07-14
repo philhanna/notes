@@ -85,11 +85,52 @@ Trash (with its own confirmation noting it is not secure Git-history
 erasure), toggled from `App.tsx` alongside the tree browser. All Phase 3 exit
 criteria are met; see the testing notes in section 7.
 
+Phase 4 is complete. `src/domain/diff.ts` adds `changedPaths` (the minimal
+set of paths where two document snapshots differ — object keys compared
+individually so edits to different keys are disjoint; equal-length arrays
+compared index by index; any other array difference conservatively reports
+the whole array as changed) and `pathsOverlap`/`anyPathOverlaps`.
+`src/domain/trash.ts` adds `changedTrashIds`, the same idea for trash
+records, which are identified by stable ID rather than array position so
+two devices deleting different entries never conflict with each other.
+`src/app/concurrency.ts` adds `affectedPaths`, mapping each `Operation`
+kind to the document paths and trash IDs it reads or writes (`recover` and
+`permanent-delete` needed a `trashId` field added to their `Operation`
+variant for this). `src/app/useDocument.ts`'s three separate commit helpers
+are replaced by one `commitCore`: every mutator now supplies a `recompute`
+function of `(document, trash) => Result<...>` instead of a precomputed
+result, so it can be reapplied against a freshly reloaded base. On a stale
+`sha`, `commitCore` reloads the latest revision, diffs it against local
+state, and either reapplies the operation once against the fresh base when
+the changed paths are disjoint from the operation's affected paths
+(design.md 7.4), or — on overlap — refreshes local `document`/`trash`/`sha`
+to the latest revision and returns a new `MutationError` variant,
+`{source: "conflict", documentChanged, trashChanged}`, so the pending input
+the caller already holds survives and a plain re-submission now operates
+against current data. `src/components/errors.ts` adds
+`describeConflictError`, naming the changed locations (never their values).
+`src/persistence/githubRepository.ts`'s `save` handles the case where the
+final ref-update request's *response* is lost (not necessarily the write
+itself): since the candidate commit's sha is already known locally before
+that request is made, an uncertain outcome is resolved by re-reading the
+branch head and comparing it directly against that candidate sha — landed,
+never landed, or someone else's write landed first — rather than by
+retrying blindly or embedding a client-generated operation ID in the commit
+message (design.md 7.4 offers the ID as a fallback "if necessary"; the
+direct sha comparison turned out to be sufficient and simpler). All of this
+is covered by new unit/component tests using the in-memory repository fake
+and a fetch mock that can throw mid-attempt to simulate a lost response;
+see the testing notes in section 7. This phase added no new GitHub API
+surface — it recombines primitives (conditional ref update, distinguishable
+`conflict`/`network` errors) already proven live in Phase 0's spikes and
+Phase 2's real device-flow pass, so it was not re-verified against a real
+repository; see section 7 for what that means for confidence in this phase.
+
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
 - [x] Phase 2 — Authentication, setup, and basic persistence
 - [x] Phase 3 — Complete tree operations and trash
-- [ ] Phase 4 — Concurrency and resilient saving
+- [x] Phase 4 — Concurrency and resilient saving
 - [ ] Phase 5 — Search, history, restoration, and export
 - [ ] Phase 6 — PWA hardening, accessibility, and release
 
@@ -341,10 +382,10 @@ metadata if necessary for reliable identification, but never include note values
 
 Exit criteria:
 
-- [ ] two browser sessions cannot silently overwrite one another;
-- [ ] disjoint edits are reapplied successfully;
-- [ ] overlapping edits stop with recoverable local state; and
-- [ ] timeout-before-response and timeout-after-commit cases do not duplicate an
+- [x] two browser sessions cannot silently overwrite one another;
+- [x] disjoint edits are reapplied successfully;
+- [x] overlapping edits stop with recoverable local state; and
+- [x] timeout-before-response and timeout-after-commit cases do not duplicate an
   operation.
 
 ### Phase 5 — Search, history, restoration, and export
@@ -554,6 +595,37 @@ the mocked component tests, since both mocked calls resolve identically
 either order). Fixed with a `cancelled` flag in the effect's cleanup —
 the standard pattern for this class of bug.
 
+Phase 4's concurrency handling has unit and component test coverage —
+`npm test` now runs 256 tests — but, unlike Phases 0 and 2, it was **not**
+separately re-verified against the real `philhanna/notes-data` repository.
+That is a deliberate, narrower claim than earlier phases make, not an
+oversight: every new GitHub-facing behavior this phase relies on (a
+conditional ref update rejecting a non-fast-forward push with a status
+distinct from other failures) was already proven live in Phase 0's spike 3
+and exercised again in Phase 2's real device-flow pass. What Phase 4 adds is
+new *client-side* orchestration around those already-proven primitives —
+reload-and-diff, reapply-once, and a post-hoc head comparison after a lost
+response — none of which talks to GitHub in a way earlier phases didn't
+already cover. `src/domain/diff.test.ts` and `src/app/concurrency.test.ts`
+cover `changedPaths`/`pathsOverlap`/`affectedPaths` directly (identical
+documents, an added/removed/changed key, nested objects, equal- and
+unequal-length arrays, a type change, and every `Operation` kind's affected
+paths). `src/app/useDocument.test.ts` drives `commitCore` through
+`createInMemoryRepository` with a real second write injected mid-test to
+simulate a concurrent device: a stale `sha` with no actual underlying change
+auto-heals and commits, a disjoint concurrent edit is silently reapplied and
+both edits survive, and an overlapping concurrent edit on the same path
+returns the new `"conflict"` `MutationError` with local state already
+refreshed to the latest revision and no duplicate commit attempted.
+`src/persistence/githubRepository.test.ts` adds a fetch mock that throws
+after a PATCH either does or doesn't actually reach the fake Git graph, to
+exercise the three uncertain-ref-update outcomes (landed with the response
+lost, never landed, and raced against another write) without a real
+network. If a two-real-browser-session race ever behaves differently from
+this mocked model, that would be a finding in the same spirit as the
+Phase 2 corrections above — not yet ruled out by direct testing the way
+those were.
+
 ### Immediate next steps
 
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
@@ -582,3 +654,13 @@ the standard pattern for this class of bug.
    recovery, permanent deletion, and Empty Trash, with the active-tree and
    `.trash/trash.json` writes as one Git Data API commit (design.md 7.3,
    9), since Phase 2 only had one file to write conditionally.
+10. ~~Implement move, copy, delete-to-trash, recovery, permanent deletion,
+    and Empty Trash on the new Git Data API persistence layer; check off
+    Phase 3.~~ Done — all exit criteria met.
+11. ~~Implement the reload/diff/reapply-once conflict handling and the
+    uncertain-ref-update head comparison; check off Phase 4.~~ Done — all
+    exit criteria met, on the mocked-test basis described just above. Next:
+    Phase 5 (search, history, restoration, and export) — build the
+    in-memory search index, add history retrieval and path-based
+    restoration bounded against rate-limit bursts, and implement active-tree
+    JSON export.

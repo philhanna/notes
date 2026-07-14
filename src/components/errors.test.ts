@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeConflictError,
   describeError,
   describePersistError,
   describeTreeError,
@@ -30,6 +31,30 @@ describe("describePersistError", () => {
   });
 });
 
+describe("describeConflictError", () => {
+  it("names the changed document paths without note values", () => {
+    const message = describeConflictError({
+      documentChanged: [["tips", "bash"]],
+      trashChanged: [],
+    });
+    expect(message).toContain("/tips/bash");
+  });
+
+  it("names a trash change by count, not content", () => {
+    const message = describeConflictError({
+      documentChanged: [],
+      trashChanged: ["t1", "t2"],
+    });
+    expect(message).toContain("2 trash items");
+  });
+
+  it("falls back to a generic phrase when nothing specific is known", () => {
+    expect(
+      describeConflictError({ documentChanged: [], trashChanged: [] }),
+    ).toContain("this data");
+  });
+});
+
 describe("describeError", () => {
   it("dispatches a domain-sourced error to describeTreeError", () => {
     expect(
@@ -47,5 +72,12 @@ describe("describeError", () => {
         error: { kind: "not-found", path: [] },
       }),
     ).toBe(describeTreeError({ kind: "not-found", path: [] }));
+  });
+
+  it("dispatches a conflict-sourced error to describeConflictError", () => {
+    const error = { documentChanged: [["a"]], trashChanged: [] };
+    expect(describeError({ source: "conflict", ...error })).toBe(
+      describeConflictError(error),
+    );
   });
 });

@@ -1,5 +1,7 @@
 import type { MutationError } from "../app/useDocument.ts";
+import { encodePointer } from "../domain/path.ts";
 import type { TreeError } from "../domain/tree.ts";
+import type { Path } from "../domain/types.ts";
 import type { PersistError } from "../persistence/types.ts";
 
 /** User-facing messages for domain errors, shown without losing input (design.md 6.1). */
@@ -54,9 +56,39 @@ export function describePersistError(error: PersistError): string {
   }
 }
 
+/**
+ * User-facing message for an overlapping-conflict MutationError (design.md
+ * 7.4, Phase 4). Local state has already been refreshed to the latest saved
+ * revision by the time this is shown, so it asks for a review and an
+ * explicit retry rather than "reload" — names only the changed locations,
+ * never note content.
+ */
+export function describeConflictError(error: {
+  documentChanged: Path[];
+  trashChanged: string[];
+}): string {
+  const parts: string[] = [];
+  if (error.documentChanged.length > 0) {
+    parts.push(
+      error.documentChanged.map((path) => encodePointer(path)).join(", "),
+    );
+  }
+  if (error.trashChanged.length > 0) {
+    const count = error.trashChanged.length;
+    parts.push(`${count} trash ${count === 1 ? "item" : "items"}`);
+  }
+  const changed = parts.length > 0 ? parts.join(" and ") : "this data";
+  return `Someone else changed ${changed} since you loaded it. The view has been refreshed — review and try again.`;
+}
+
 /** Dispatches to the right description for a mutator's tagged MutationError. */
 export function describeError(error: MutationError): string {
-  return error.source === "domain"
-    ? describeTreeError(error.error)
-    : describePersistError(error.error);
+  switch (error.source) {
+    case "domain":
+      return describeTreeError(error.error);
+    case "persist":
+      return describePersistError(error.error);
+    case "conflict":
+      return describeConflictError(error);
+  }
 }

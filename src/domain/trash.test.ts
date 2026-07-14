@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EMPTY_TRASH,
   TRASH_SCHEMA_VERSION,
+  changedTrashIds,
   deleteToTrash,
   emptyTrash,
   parseTrash,
@@ -78,7 +79,12 @@ describe("deleteToTrash", () => {
         },
       ],
     };
-    const result = deleteToTrash(sample(), existing, ["hardinfo"], RECORD_INPUT);
+    const result = deleteToTrash(
+      sample(),
+      existing,
+      ["hardinfo"],
+      RECORD_INPUT,
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.trash.records.map((record) => record.id)).toEqual([
@@ -223,6 +229,42 @@ describe("emptyTrash", () => {
   });
 });
 
+describe("changedTrashIds", () => {
+  it("reports nothing when trash is unchanged", () => {
+    const { trash } = deletedState(["hardinfo"]);
+    expect(changedTrashIds(trash, trash)).toEqual([]);
+  });
+
+  it("reports an added record's ID", () => {
+    const { document, trash: after1 } = deletedState(["hardinfo"]);
+    const after2 = deleteToTrash(document, after1, ["with-rating"], {
+      id: "trash-2",
+      deletedAt: "2026-07-14T00:00:00.000Z",
+    });
+    if (!after2.ok) throw new Error("setup: expected delete to succeed");
+    expect(changedTrashIds(after1, after2.value.trash)).toEqual(["trash-2"]);
+  });
+
+  it("reports a removed record's ID", () => {
+    const { trash } = deletedState(["hardinfo"]);
+    expect(changedTrashIds(trash, EMPTY_TRASH)).toEqual(["trash-1"]);
+  });
+
+  it("does not report an unrelated record left untouched", () => {
+    const { document, trash: after1 } = deletedState(["hardinfo"]);
+    const after2 = deleteToTrash(document, after1, ["with-rating"], {
+      id: "trash-2",
+      deletedAt: "2026-07-14T00:00:00.000Z",
+    });
+    if (!after2.ok) throw new Error("setup: expected delete to succeed");
+    const removed = permanentlyDelete(after2.value.trash, "trash-2");
+    if (!removed.ok) throw new Error("setup: expected removal to succeed");
+    expect(changedTrashIds(after2.value.trash, removed.value)).toEqual([
+      "trash-2",
+    ]);
+  });
+});
+
 describe("serializeTrash / parseTrash / validateTrash", () => {
   it("round-trips through serialize and parse", () => {
     const { trash } = deletedState(["hardinfo"]);
@@ -237,7 +279,10 @@ describe("serializeTrash / parseTrash / validateTrash", () => {
   });
 
   it("rejects a non-object root", () => {
-    expect(validateTrash([])).toEqual({ ok: false, error: { kind: "invalid-root" } });
+    expect(validateTrash([])).toEqual({
+      ok: false,
+      error: { kind: "invalid-root" },
+    });
     expect(validateTrash("nope")).toEqual({
       ok: false,
       error: { kind: "invalid-root" },
@@ -246,18 +291,26 @@ describe("serializeTrash / parseTrash / validateTrash", () => {
 
   it("rejects an unsupported schema version", () => {
     const result = validateTrash({ version: 2, records: [] });
-    expect(result).toEqual({ ok: false, error: { kind: "unsupported-version" } });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "unsupported-version" },
+    });
   });
 
   it("rejects a non-array records field", () => {
-    const result = validateTrash({ version: TRASH_SCHEMA_VERSION, records: {} });
+    const result = validateTrash({
+      version: TRASH_SCHEMA_VERSION,
+      records: {},
+    });
     expect(result).toEqual({ ok: false, error: { kind: "invalid-root" } });
   });
 
   it("rejects a record missing a required field", () => {
     const result = validateTrash({
       version: TRASH_SCHEMA_VERSION,
-      records: [{ id: "1", deletedAt: "now", originalPath: "/x", type: "string" }],
+      records: [
+        { id: "1", deletedAt: "now", originalPath: "/x", type: "string" },
+      ],
     });
     expect(result).toEqual({
       ok: false,

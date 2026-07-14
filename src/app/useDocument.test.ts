@@ -247,28 +247,100 @@ describe("useDocument", () => {
       ).toBe(true);
     });
 
-    it("leaves the document unchanged and reports a persist error on a stale sha", async () => {
+    it("automatically reapplies a stale write when nothing actually changed underneath (Phase 4)", async () => {
+      // The hook's initialSha wasn't the repository's real starting sha — a
+      // mismatch that never reflected an actual concurrent change. Reloading
+      // finds the content identical, so the disjoint-reapply path (design.md
+      // 7.4) resolves it without surfacing an error.
       const repository = createInMemoryRepository({
         initialDocument: sample(),
       });
       const { result } = renderHook(() =>
         useDocument(sample(), { repository, initialSha: "stale-sha" }),
       );
-      const before = result.current.document;
 
       await act(async () => {
         const outcome = await result.current.setValue(["hardinfo"], "updated");
+        expect(outcome.ok).toBe(true);
+      });
+
+      expect(repository.commits).toHaveLength(1);
+      const child = result.current.children.find(
+        (c) => c.kind === "object-entry" && c.key === "hardinfo",
+      );
+      expect(child).toMatchObject({ value: "updated" });
+    });
+
+    it("reapplies a disjoint concurrent edit and succeeds (Phase 4 exit criterion)", async () => {
+      const repository = createInMemoryRepository({
+        initialDocument: sample(),
+      });
+      const baseSha = "sha-0";
+      const { result } = renderHook(() =>
+        useDocument(sample(), { repository, initialSha: baseSha }),
+      );
+
+      // Simulate a second device committing an unrelated change first.
+      await repository.save(
+        {
+          document: { ...sample(), list: [9, 9, 9] },
+          trash: { version: 1, records: [] },
+        },
+        baseSha,
+        { kind: "set-value", path: ["list"] },
+      );
+
+      await act(async () => {
+        const outcome = await result.current.setValue(["hardinfo"], "updated");
+        expect(outcome.ok).toBe(true);
+      });
+
+      expect(repository.commits).toHaveLength(2);
+      const document = repository.commits[1]!.document;
+      expect(document.hardinfo).toBe("updated");
+      expect(document.list).toEqual([9, 9, 9]); // the other device's disjoint edit survived the reapply
+    });
+
+    it("stops an overlapping concurrent edit with a conflict error and refreshed, recoverable local state", async () => {
+      const repository = createInMemoryRepository({
+        initialDocument: sample(),
+      });
+      const baseSha = "sha-0";
+      const { result } = renderHook(() =>
+        useDocument(sample(), { repository, initialSha: baseSha }),
+      );
+
+      // Simulate a second device changing the very key this hook is about to edit.
+      await repository.save(
+        {
+          document: { ...sample(), hardinfo: "changed elsewhere" },
+          trash: { version: 1, records: [] },
+        },
+        baseSha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+
+      await act(async () => {
+        const outcome = await result.current.setValue(
+          ["hardinfo"],
+          "my update",
+        );
         expect(outcome.ok).toBe(false);
         if (!outcome.ok) {
-          expect(outcome.error).toEqual({
-            source: "persist",
-            error: { kind: "conflict" },
-          });
+          expect(outcome.error.source).toBe("conflict");
+          if (outcome.error.source === "conflict") {
+            expect(outcome.error.documentChanged).toEqual([["hardinfo"]]);
+          }
         }
       });
 
-      expect(result.current.document).toBe(before);
-      expect(repository.commits).toHaveLength(0);
+      // Local state was refreshed to the latest saved revision, not left stale.
+      const child = result.current.children.find(
+        (c) => c.kind === "object-entry" && c.key === "hardinfo",
+      );
+      expect(child).toMatchObject({ value: "changed elsewhere" });
+      // No duplicate/extra commit was made for the losing attempt.
+      expect(repository.commits).toHaveLength(1);
     });
 
     it("does not call the repository when domain validation fails first", async () => {
