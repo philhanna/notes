@@ -1,18 +1,20 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import type { MutationError } from "../app/useDocument.ts";
 import { inferValue } from "../domain/inference.ts";
-import type { TreeError } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue } from "../domain/types.ts";
-import { describeTreeError } from "./errors.ts";
+import { describeError } from "./errors.ts";
 
 interface CreateEntryFormProps {
   isArray: boolean;
   onCreateEntry: (
     key: string,
     value: JsonValue,
-  ) => Result<JsonObject, TreeError>;
-  onCreateElement: (value: JsonValue) => Result<JsonObject, TreeError>;
+  ) => Promise<Result<JsonObject, MutationError>>;
+  onCreateElement: (
+    value: JsonValue,
+  ) => Promise<Result<JsonObject, MutationError>>;
 }
 
 /** Creates a new object entry or array element at the current level (design.md 7.1). */
@@ -24,26 +26,32 @@ export function CreateEntryForm({
   const [key, setKey] = useState("");
   const [valueText, setValueText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const inferred = inferValue(valueText);
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    setSaving(true);
     const result = isArray
-      ? onCreateElement(inferred.value)
-      : onCreateEntry(key, inferred.value);
+      ? await onCreateElement(inferred.value)
+      : await onCreateEntry(key, inferred.value);
+    setSaving(false);
     if (result.ok) {
       setKey("");
       setValueText("");
       setError(null);
     } else {
-      setError(describeTreeError(result.error));
+      setError(describeError(result.error));
     }
   }
 
   const actionLabel = isArray ? "Add element" : "Add entry";
 
   return (
-    <form className="create-entry-form" onSubmit={handleSubmit}>
+    <form
+      className="create-entry-form"
+      onSubmit={(event) => void handleSubmit(event)}
+    >
       <h2>{actionLabel}</h2>
       {!isArray && (
         <>
@@ -66,7 +74,9 @@ export function CreateEntryForm({
         Will save as <strong>{inferred.kind}</strong>:{" "}
         <code>{JSON.stringify(inferred.value)}</code>
       </p>
-      <button type="submit">{actionLabel}</button>
+      <button type="submit" disabled={saving}>
+        {actionLabel}
+      </button>
       {error && (
         <p className="child-row__error" role="alert">
           {error}

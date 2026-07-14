@@ -1,7 +1,9 @@
-// Spike: minimal secretless CORS relay for the two github.com device-flow
+// Minimal secretless CORS relay for the two github.com device-flow
 // endpoints that do not send CORS headers. Holds no secret and no state —
 // it only forwards the request body verbatim and adds a CORS header to the
-// response. See docs/design.md section 3.2 (updated) for why this exists.
+// response. See docs/design.md section 3.4 for why this exists. Deployed as
+// the Cloudflare Worker at https://notes-auth-relay-spike.ph1204.workers.dev
+// (name predates promotion out of spikes/; see docs/impl.md Phase 0/2).
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin,

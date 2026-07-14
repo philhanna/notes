@@ -31,19 +31,40 @@ key invariants from section 5.2, and `tree.ts` implements the Phase 1
 operations (navigate, list children, create an object entry or array
 element, rename a key, update a value with confirmation for a
 scalar/container or object/array boundary crossing, reorder an array) as
-pure functions returning a typed `Result`. `src/app/useDocument.ts` is a
-thin React hook applying those operations to local component state against
-fixture data (`src/app/fixtures/sampleDocument.ts` — fictional placeholder
-content, not real notes, since this repository is public per
-`docs/design.md` section 3.3). `src/components/` has a first local tree
-browser (breadcrumbs, child list, create/edit/rename forms, array
+pure functions returning a typed `Result`. `src/components/` has the local
+tree browser (breadcrumbs, child list, create/edit/rename forms, array
 move-up/move-down controls, and a confirmation dialog for type-changing
-replacements) with no GitHub or authentication wiring yet — that is Phase
-2. All Phase 1 exit criteria are met; see the testing notes in section 7.
+replacements). All Phase 1 exit criteria are met; see the testing notes in
+section 7.
+
+Phase 2 is complete. `src/auth/` implements GitHub App device flow through
+the relay (`deviceFlow.ts`), per-device token storage (`tokenStore.ts`),
+repository selection stored separately from credentials (`repoConfig.ts`),
+and a `useAuth` hook orchestrating sign-in, sign-out, and (when needed)
+silent refresh. `src/persistence/` defines a `Repository` port
+(`checkRepository`, `ensureDocument`, `loadDocument`, `saveDocument`) with
+a real GitHub adapter (`githubRepository.ts`, Contents API, conditional on
+`sha`) and an in-memory fake (`inMemoryRepository.ts`) exercised by the
+same contract tests (`repository.contract.test.ts`). `src/app/useDocument.ts`
+now optionally takes a `Repository` and commits each successful domain
+mutation through it before updating local state, so a failed save leaves
+both the document and the caller's pending input unchanged; mutators are
+`Promise`-returning uniformly, and mutation failures are tagged
+`{source: "domain" | "persist"}` since `TreeError` and `PersistError`
+share some `kind` values. `src/components/App.tsx` is now the top-level
+state machine (signed-out → `SignIn.tsx`; signed-in with no stored
+repository → `Setup.tsx`; otherwise load and show `TreeBrowser`).
+`src/app/fixtures/sampleDocument.ts` (Phase 1's fixture document) is
+deleted — Phase 1's component tests now build their own small inline
+sample document instead, and the app itself always loads a real document.
+The relay's source moved from `spikes/relay/` to the
+top-level `relay/` (design.md section 2's layout) without changing its
+deployed URL. All Phase 2 exit criteria are met; see the testing notes in
+section 7, including two real findings not apparent from GitHub's docs.
 
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
-- [ ] Phase 2 — Authentication, setup, and basic persistence
+- [x] Phase 2 — Authentication, setup, and basic persistence
 - [ ] Phase 3 — Complete tree operations and trash
 - [ ] Phase 4 — Concurrency and resilient saving
 - [ ] Phase 5 — Search, history, restoration, and export
@@ -205,7 +226,10 @@ browser storage, centralize authenticated requests, redact diagnostics, and
 handle refresh, revocation, sign-out, and authorization expiry. Deploy the
 `relay/` function from a real account (Phase 0 proved it locally only) and
 point the auth module at its URL; the relay's own address is non-secret
-configuration, not a credential.
+configuration, not a credential. **Result:** the relay was already deployed
+for real during Phase 0's closing spike 4 rerun, so Phase 2 only pointed
+`src/auth/` at its existing URL and moved its source from `spikes/relay/`
+to the top-level `relay/` without redeploying or changing the URL.
 
 The setup flow should accept owner, repository, and branch; confirm that the
 repository is private and writable; discover the repository's default branch;
@@ -217,13 +241,45 @@ head commit, produce and validate a complete new document, make one conditional
 commit, and update local state only after success. Generate value-free commit
 messages from structured operation metadata.
 
+Two design assumptions above were invalidated by direct testing against a
+real device-flow sign-in, in the same spirit as the Phase 0 CORS finding —
+neither was apparent from GitHub's documentation alone:
+
+1. "Handle refresh" assumed a device-flow token's `refresh_token` grant
+   needs no client secret, matching the initial device-code exchange. It
+   does not: GitHub's `refresh_token` grant for a GitHub App user token
+   requires `client_secret`, which a static PWA and its secretless relay
+   cannot hold without contradicting design.md 3.4's explicit "the relay
+   holds no secret" invariant. Confirmed by calling the relay's
+   `/oauth/token` route directly with `grant_type=refresh_token` and
+   observing `incorrect_client_credentials` regardless of whether a
+   (dummy) `client_secret` was included. **Resolution:** rather than give
+   the relay a secret, "Expire user authorization tokens" was disabled on
+   the GitHub App itself (a one-time dashboard change, not a code or design
+   change). New tokens are now non-expiring and revocable via sign-out or
+   GitHub settings, which `src/auth/tokenStore.ts` already handled as its
+   "never expires" case (`accessTokenExpiresAt: null`) — so `useAuth.ts`'s
+   refresh path exists for a token shape this app no longer issues, kept
+   only in case token expiration is ever re-enabled.
+2. GitHub's Contents API GET can briefly lag behind a PUT it just accepted:
+   a real page reload immediately after a real save momentarily showed the
+   pre-save document, confirmed correct (including the new key) by querying
+   the same endpoint again about a minute later. This is a read-after-write
+   propagation characteristic of the API, not a bug in `saveDocument` — the
+   commit is real and immediate (`saveDocument` returns the new `sha` from
+   the PUT response and the app updates local state from that response, not
+   from a re-fetch), and only a reload within the same short window can
+   observe it. Not a Phase 2 blocker; Phase 4 (concurrency and resilient
+   saving) is the natural place to revisit reload timing if it proves
+   user-visible in practice.
+
 Exit criteria:
 
-- [ ] a new device can authorize, select the dedicated repository, and reopen it;
-- [ ] sign-out removes local authorization;
-- [ ] setup never overwrites an existing document or changes repository visibility;
-- [ ] all basic mutations create one valid commit each; and
-- [ ] connectivity, rate-limit, authorization, malformed-data, and write errors are
+- [x] a new device can authorize, select the dedicated repository, and reopen it;
+- [x] sign-out removes local authorization;
+- [x] setup never overwrites an existing document or changes repository visibility;
+- [x] all basic mutations create one valid commit each; and
+- [x] connectivity, rate-limit, authorization, malformed-data, and write errors are
   distinct and preserve the user's unsaved input.
 
 ### Phase 3 — Complete tree operations and trash
@@ -427,6 +483,54 @@ the Phase 0 PWA scaffold. The fixture data in
 real notes — see `docs/design.md` section 3.3 on this repository being
 public.
 
+Phase 2's `src/auth/` and `src/persistence/` have unit tests with `fetch`
+mocked to the request/response shapes spikes 1–3 already proved: device
+flow's request/poll/refresh outcomes (pending, slow_down, expired, denied),
+token storage and expiry, `useAuth`'s sign-in/cancel/sign-out state
+machine, `checkRepository`/`ensureDocument`/`loadDocument`/`saveDocument`
+against every `PersistError` kind, and a shared contract suite
+(`repository.contract.test.ts`) running the same cases against
+`inMemoryRepository` and a mocked GitHub transport. `useDocument.ts`'s
+tests cover both the persistence-free path and a repository-backed path
+(successful commit advances `sha`; a stale `sha` reports a conflict and
+leaves the document and commit log untouched). `npm test` now runs 138
+tests; `npm run lint`, `npm run typecheck`, `npm run format`, and
+`npm run build` all pass.
+
+Beyond mocked tests, Phase 2 was verified against the real
+`philhanna/notes-data` repository twice, per this document's own rule not
+to trust GitHub integration claims from reasoning alone:
+
+- **Non-interactive:** `spikes/05-phase2-live-check.ts` (run with
+  `node --experimental-strip-types`) imports the real `src/auth/deviceFlow.ts`
+  and `src/persistence/githubRepository.ts` — not a reimplementation —
+  refreshes a token through the deployed relay, then drives
+  `checkRepository`, `ensureDocument`/`loadDocument`, a conditional
+  `saveDocument`, a deliberately stale-`sha` `saveDocument` (confirmed
+  `conflict`), and a restore. Redacted result in
+  `spikes/fixtures/05-phase2-live-check.json`.
+- **Interactive:** the app was driven with a real headless Chrome
+  (Playwright) against `npm run dev`, including a real device-flow
+  sign-in with a human approving the code on github.com, connecting to
+  `philhanna/notes-data` through `Setup`, creating a real entry, and
+  confirming the resulting commit was visible both in the running app and
+  by querying the GitHub API directly. This pass is what surfaced both
+  findings recorded under Phase 2 above (the `refresh_token` client-secret
+  requirement, found when a follow-up cleanup call needed a refresh; and
+  the read-after-write reload lag, found when an immediate `page.reload()`
+  briefly showed the pre-save document). After disabling token expiration
+  on the GitHub App, the flow was rerun clean end-to-end with a freshly
+  issued non-expiring token. Disposable marker keys created during these
+  runs were removed from `philhanna/notes-data` afterward.
+
+A related fix surfaced independently: React 19 StrictMode double-invokes
+effects in development, and `App.tsx`'s document-loading effect had no
+guard against two overlapping `loadDocument` calls racing on `setState`
+(only found by comparing successive Playwright runs' network logs, not by
+the mocked component tests, since both mocked calls resolve identically
+either order). Fixed with a `cancelled` flag in the effect's cleanup —
+the standard pattern for this class of bug.
+
 ### Immediate next steps
 
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
@@ -443,7 +547,15 @@ public.
    audit` clean, no credentials found in source, build artifacts, or logs.
 6. ~~Check off Phase 0.~~ Done — all exit criteria met.
 7. ~~Build the domain model and a local tree browser against fixture
-   data.~~ Done. Next: Phase 2 (authentication, setup, and basic
-   persistence) — wire the local tree browser to real GitHub read/write
-   through the auth relay and repository adapter, replacing the fixture
-   document.
+   data.~~ Done.
+8. ~~Implement device-flow auth, repository setup, and basic persistence;
+   wire the tree browser to real GitHub read/write.~~ Done. Disabled
+   "Expire user authorization tokens" on the GitHub App after discovering
+   the `refresh_token` grant needs a client secret the relay cannot hold
+   (see Phase 2 above); verified live against `philhanna/notes-data` both
+   non-interactively and through a real device-flow sign-in.
+9. ~~Check off Phase 2.~~ Done — all exit criteria met. Next: Phase 3
+   (complete tree operations and trash) — move, copy, recursive delete,
+   recovery, permanent deletion, and Empty Trash, with the active-tree and
+   `.trash/trash.json` writes as one Git Data API commit (design.md 7.3,
+   9), since Phase 2 only had one file to write conditionally.

@@ -1,26 +1,30 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import type { ChildEntry, TreeError } from "../domain/tree.ts";
+import type { MutationError } from "../app/useDocument.ts";
+import type { ChildEntry } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { isContainer, isJsonArray, isJsonObject } from "../domain/types.ts";
 import { ValueEditor } from "./ValueEditor.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { describeTreeError } from "./errors.ts";
+import { describeError } from "./errors.ts";
 
 interface ChildRowProps {
   entry: ChildEntry;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onOpen: (path: Path) => void;
-  onRename: (oldKey: string, newKey: string) => Result<JsonObject, TreeError>;
+  onRename: (
+    oldKey: string,
+    newKey: string,
+  ) => Promise<Result<JsonObject, MutationError>>;
   onSetValue: (
     path: Path,
     value: JsonValue,
     confirmReplace?: boolean,
-  ) => Result<JsonObject, TreeError>;
-  onMoveUp: () => Result<JsonObject, TreeError>;
-  onMoveDown: () => Result<JsonObject, TreeError>;
+  ) => Promise<Result<JsonObject, MutationError>>;
+  onMoveUp: () => Promise<Result<JsonObject, MutationError>>;
+  onMoveDown: () => Promise<Result<JsonObject, MutationError>>;
 }
 
 type Mode = "view" | "edit-value" | "rename";
@@ -39,6 +43,7 @@ export function ChildRow({
   const [mode, setMode] = useState<Mode>("view");
   const [error, setError] = useState<string | null>(null);
   const [pendingValue, setPendingValue] = useState<JsonValue | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const label = entry.kind === "object-entry" ? entry.key : `[${entry.index}]`;
   const container = isContainer(entry.value);
@@ -49,52 +54,65 @@ export function ChildRow({
     setError(null);
   }
 
-  function handleValueSubmit(value: JsonValue) {
-    const result = onSetValue(entry.path, value, false);
+  async function handleValueSubmit(value: JsonValue) {
+    setSaving(true);
+    const result = await onSetValue(entry.path, value, false);
+    setSaving(false);
     if (result.ok) {
       resetToView();
       return;
     }
-    if (result.error.kind === "confirmation-required") {
+    if (
+      result.error.source === "domain" &&
+      result.error.error.kind === "confirmation-required"
+    ) {
       setError(null);
       setPendingValue(value);
       return;
     }
-    setError(describeTreeError(result.error));
+    setError(describeError(result.error));
   }
 
-  function handleConfirmReplace() {
+  async function handleConfirmReplace() {
     if (pendingValue === null) return;
-    const result = onSetValue(entry.path, pendingValue, true);
+    setSaving(true);
+    const result = await onSetValue(entry.path, pendingValue, true);
+    setSaving(false);
     if (result.ok) {
       resetToView();
     } else {
-      setError(describeTreeError(result.error));
+      setError(describeError(result.error));
       setPendingValue(null);
     }
   }
 
-  function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const newKey = String(
       new FormData(event.currentTarget).get("newKey") ?? "",
     );
-    const result = onRename(label, newKey);
+    setSaving(true);
+    const result = await onRename(label, newKey);
+    setSaving(false);
     if (result.ok) {
       resetToView();
     } else {
-      setError(describeTreeError(result.error));
+      setError(describeError(result.error));
     }
   }
 
-  function handleMoveUp() {
-    const result = onMoveUp();
-    if (!result.ok) setError(describeTreeError(result.error));
+  async function handleMoveUp() {
+    setSaving(true);
+    const result = await onMoveUp();
+    setSaving(false);
+    if (!result.ok) setError(describeError(result.error));
   }
 
-  function handleMoveDown() {
-    const result = onMoveDown();
-    if (!result.ok) setError(describeTreeError(result.error));
+  async function handleMoveDown() {
+    setSaving(true);
+    const result = await onMoveDown();
+    setSaving(false);
+    if (!result.ok) setError(describeError(result.error));
   }
 
   return (
@@ -120,11 +138,19 @@ export function ChildRow({
 
       {mode === "view" && (
         <div className="child-row__actions">
-          <button type="button" onClick={() => setMode("edit-value")}>
+          <button
+            type="button"
+            onClick={() => setMode("edit-value")}
+            disabled={saving}
+          >
             Edit
           </button>
           {entry.kind === "object-entry" && (
-            <button type="button" onClick={() => setMode("rename")}>
+            <button
+              type="button"
+              onClick={() => setMode("rename")}
+              disabled={saving}
+            >
               Rename
             </button>
           )}
@@ -132,16 +158,16 @@ export function ChildRow({
             <>
               <button
                 type="button"
-                onClick={handleMoveUp}
-                disabled={!canMoveUp}
+                onClick={() => void handleMoveUp()}
+                disabled={saving || !canMoveUp}
                 aria-label={`Move ${label} up`}
               >
                 Move up
               </button>
               <button
                 type="button"
-                onClick={handleMoveDown}
-                disabled={!canMoveDown}
+                onClick={() => void handleMoveDown()}
+                disabled={saving || !canMoveDown}
                 aria-label={`Move ${label} down`}
               >
                 Move down
@@ -157,14 +183,14 @@ export function ChildRow({
             idPrefix={`edit-${label}`}
             initialText={JSON.stringify(entry.value)}
             submitLabel="Save"
-            onSubmit={handleValueSubmit}
+            onSubmit={(value) => void handleValueSubmit(value)}
             onCancel={resetToView}
           />
           {pendingValue !== null && (
             <ConfirmDialog
               message={`Replacing "${label}" changes its type and discards its current content. Continue?`}
               confirmLabel="Replace"
-              onConfirm={handleConfirmReplace}
+              onConfirm={() => void handleConfirmReplace()}
               onCancel={() => setPendingValue(null)}
             />
           )}
@@ -172,7 +198,10 @@ export function ChildRow({
       )}
 
       {mode === "rename" && (
-        <form className="child-row__rename" onSubmit={handleRenameSubmit}>
+        <form
+          className="child-row__rename"
+          onSubmit={(event) => void handleRenameSubmit(event)}
+        >
           <label htmlFor={`rename-${label}`}>New key</label>
           <input
             id={`rename-${label}`}
@@ -180,8 +209,10 @@ export function ChildRow({
             defaultValue={label}
             autoFocus
           />
-          <button type="submit">Save</button>
-          <button type="button" onClick={resetToView}>
+          <button type="submit" disabled={saving}>
+            Save
+          </button>
+          <button type="button" onClick={resetToView} disabled={saving}>
             Cancel
           </button>
         </form>
