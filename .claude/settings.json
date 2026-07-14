@@ -11,7 +11,12 @@
       "Bash(npx *)",
       "Skill(run)",
       "Skill(run:*)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(npm run *)",
+      "Bash(echo \"LINT_EXIT=$?\")",
+      "Bash(pkill -f \"vite --port 5199\")"
     ]
   }
 }

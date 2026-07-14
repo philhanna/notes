@@ -25,9 +25,15 @@ interface ChildRowProps {
   ) => Promise<Result<JsonObject, MutationError>>;
   onMoveUp: () => Promise<Result<JsonObject, MutationError>>;
   onMoveDown: () => Promise<Result<JsonObject, MutationError>>;
+  onRelocate: (
+    kind: "move" | "copy",
+    destinationPointer: string,
+    newKey: string | undefined,
+  ) => Promise<Result<JsonObject, MutationError>>;
+  onDelete: () => Promise<Result<JsonObject, MutationError>>;
 }
 
-type Mode = "view" | "edit-value" | "rename";
+type Mode = "view" | "edit-value" | "rename" | "relocate";
 
 /** One row of the tree browser's child list (design.md 6.1). */
 export function ChildRow({
@@ -39,10 +45,14 @@ export function ChildRow({
   onSetValue,
   onMoveUp,
   onMoveDown,
+  onRelocate,
+  onDelete,
 }: ChildRowProps) {
   const [mode, setMode] = useState<Mode>("view");
+  const [relocateKind, setRelocateKind] = useState<"move" | "copy">("move");
   const [error, setError] = useState<string | null>(null);
   const [pendingValue, setPendingValue] = useState<JsonValue | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const label = entry.kind === "object-entry" ? entry.key : `[${entry.index}]`;
@@ -115,6 +125,38 @@ export function ChildRow({
     if (!result.ok) setError(describeError(result.error));
   }
 
+  function openRelocate(kind: "move" | "copy") {
+    setRelocateKind(kind);
+    setMode("relocate");
+  }
+
+  async function handleRelocateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const destinationPointer = String(data.get("destination") ?? "");
+    const newKeyInput = String(data.get("newKey") ?? "").trim();
+    setSaving(true);
+    const result = await onRelocate(
+      relocateKind,
+      destinationPointer,
+      newKeyInput === "" ? undefined : newKeyInput,
+    );
+    setSaving(false);
+    if (result.ok) {
+      resetToView();
+    } else {
+      setError(describeError(result.error));
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    setSaving(true);
+    const result = await onDelete();
+    setSaving(false);
+    setConfirmingDelete(false);
+    if (!result.ok) setError(describeError(result.error));
+  }
+
   return (
     <li className="child-row">
       <div className="child-row__main">
@@ -174,6 +216,27 @@ export function ChildRow({
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => openRelocate("move")}
+            disabled={saving}
+          >
+            Move to…
+          </button>
+          <button
+            type="button"
+            onClick={() => openRelocate("copy")}
+            disabled={saving}
+          >
+            Copy to…
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={saving}
+          >
+            Delete
+          </button>
         </div>
       )}
 
@@ -216,6 +279,40 @@ export function ChildRow({
             Cancel
           </button>
         </form>
+      )}
+
+      {mode === "relocate" && (
+        <form
+          className="child-row__relocate"
+          onSubmit={(event) => void handleRelocateSubmit(event)}
+        >
+          <label htmlFor={`destination-${label}`}>
+            Destination (JSON Pointer to the containing object or array)
+          </label>
+          <input
+            id={`destination-${label}`}
+            name="destination"
+            placeholder="/tips"
+            autoFocus
+          />
+          <label htmlFor={`new-key-${label}`}>New key (object destinations only)</label>
+          <input id={`new-key-${label}`} name="newKey" placeholder={label} />
+          <button type="submit" disabled={saving}>
+            {relocateKind === "move" ? "Move" : "Copy"}
+          </button>
+          <button type="button" onClick={resetToView} disabled={saving}>
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${label}"? It will be moved to trash.`}
+          confirmLabel="Delete"
+          onConfirm={() => void handleDeleteConfirm()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       )}
 
       {error && (

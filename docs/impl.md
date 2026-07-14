@@ -62,10 +62,33 @@ top-level `relay/` (design.md section 2's layout) without changing its
 deployed URL. All Phase 2 exit criteria are met; see the testing notes in
 section 7, including two real findings not apparent from GitHub's docs.
 
+Phase 3 is complete. `src/domain/tree.ts` adds `move`, `copy`, and the shared
+`removeEntry`/`insertAtDestination` primitives, with cycle prevention for
+moving a container into itself or a descendant. `src/domain/trash.ts` defines
+the versioned trash schema (`TrashDocument`/`TrashRecord`), `deleteToTrash`,
+`recoverFromTrash` (original path first, falling back to
+`destination-required` rather than guessing), `permanentlyDelete`, and
+`emptyTrash`, plus its own parse/validate pair so malformed
+`.trash/trash.json` fails closed. `src/persistence/gitDataApi.ts` wraps the
+Git Data API's blob/tree/commit/ref objects, and `githubRepository.ts` now
+builds every commit (`remember.json` and `.trash/trash.json` together) through
+it instead of the Contents API, so `Repository.save` is atomic across both
+files (`LoadedDocument`/`save` changed shape accordingly; `inMemoryRepository.ts`
+and the contract tests moved with it). `src/app/useDocument.ts` adds
+`move`/`copy`/`deleteEntry`/`recover`/`permanentlyDeleteTrash`/`emptyTrash`,
+each committing through the same `Repository.save` as the Phase 1/2 mutators.
+`src/components/ChildRow.tsx` adds Move to…/Copy to…/Delete controls (a
+JSON-Pointer destination field, confirmation before delete); a new
+`TrashView.tsx` lists trash records with Recover (opening an inline
+destination picker on `destination-required`), Delete permanently, and Empty
+Trash (with its own confirmation noting it is not secure Git-history
+erasure), toggled from `App.tsx` alongside the tree browser. All Phase 3 exit
+criteria are met; see the testing notes in section 7.
+
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
 - [x] Phase 2 — Authentication, setup, and basic persistence
-- [ ] Phase 3 — Complete tree operations and trash
+- [x] Phase 3 — Complete tree operations and trash
 - [ ] Phase 4 — Concurrency and resilient saving
 - [ ] Phase 5 — Search, history, restoration, and export
 - [ ] Phase 6 — PWA hardening, accessibility, and release
@@ -296,10 +319,10 @@ clearly explain that Empty Trash is not secure Git-history erasure.
 
 Exit criteria:
 
-- [ ] all operations are atomic at the Git commit level;
-- [ ] recursive operations and cycle prevention have focused domain tests;
-- [ ] malformed trash data fails safely without damaging the active document; and
-- [ ] end-to-end tests cover delete, conflict on recovery, alternate destination,
+- [x] all operations are atomic at the Git commit level;
+- [x] recursive operations and cycle prevention have focused domain tests;
+- [x] malformed trash data fails safely without damaging the active document; and
+- [x] end-to-end tests cover delete, conflict on recovery, alternate destination,
   permanent deletion, and Empty Trash.
 
 ### Phase 4 — Concurrency and resilient saving

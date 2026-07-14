@@ -21,6 +21,16 @@ export function describeTreeError(error: TreeError): string {
       return "That position is out of range.";
     case "confirmation-required":
       return "This replacement changes the value's type and requires confirmation.";
+    case "cannot-delete-root":
+      return "The whole document cannot be deleted.";
+    case "cannot-move-root":
+      return "The whole document cannot be moved.";
+    case "cannot-move-into-descendant":
+      return "A container cannot be moved into itself or one of its contents.";
+    case "trash-record-not-found":
+      return "That trash item no longer exists.";
+    case "destination-required":
+      return "That location isn't available. Choose a different destination.";
   }
 }
 

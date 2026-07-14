@@ -37,4 +37,37 @@ describe("describeOperation", () => {
     });
     expect(message).toBe("Set /secret key");
   });
+
+  it("describes move and copy with both paths", () => {
+    expect(
+      describeOperation({
+        kind: "move",
+        path: ["tips", "bash", "fc"],
+        newPath: ["shell", "bash", "fc"],
+      }),
+    ).toBe("Move /tips/bash/fc to /shell/bash/fc");
+    expect(
+      describeOperation({
+        kind: "copy",
+        path: ["tips"],
+        newPath: ["tips-copy"],
+      }),
+    ).toBe("Copy /tips to /tips-copy");
+  });
+
+  it("describes delete, recover, and permanent-delete by original path", () => {
+    expect(
+      describeOperation({ kind: "delete", path: ["with-rating"] }),
+    ).toBe("Delete /with-rating");
+    expect(describeOperation({ kind: "recover", path: ["with-rating"] })).toBe(
+      "Restore /with-rating from trash",
+    );
+    expect(
+      describeOperation({ kind: "permanent-delete", path: ["with-rating"] }),
+    ).toBe("Permanently delete /with-rating");
+  });
+
+  it("describes empty-trash without a path", () => {
+    expect(describeOperation({ kind: "empty-trash" })).toBe("Empty trash");
+  });
 });

@@ -13,5 +13,17 @@ export function describeOperation(operation: Operation): string {
       return `Set ${encodePointer(operation.path)}`;
     case "reorder":
       return `Reorder ${encodePointer(operation.path)}`;
+    case "move":
+      return `Move ${encodePointer(operation.path)} to ${encodePointer(operation.newPath)}`;
+    case "copy":
+      return `Copy ${encodePointer(operation.path)} to ${encodePointer(operation.newPath)}`;
+    case "delete":
+      return `Delete ${encodePointer(operation.path)}`;
+    case "recover":
+      return `Restore ${encodePointer(operation.path)} from trash`;
+    case "permanent-delete":
+      return `Permanently delete ${encodePointer(operation.path)}`;
+    case "empty-trash":
+      return "Empty trash";
   }
 }

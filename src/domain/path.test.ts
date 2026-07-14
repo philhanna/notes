@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustPathAfterRemoval,
   decodePointerSegments,
   encodePointer,
+  isPathWithinOrEqual,
   resolvePointer,
 } from "./path.ts";
 
@@ -66,5 +68,71 @@ describe("resolvePointer", () => {
 
   it("returns undefined for a non-numeric array segment", () => {
     expect(resolvePointer(doc, "/tips/bash/first")).toBeUndefined();
+  });
+});
+
+describe("isPathWithinOrEqual", () => {
+  it("is true for the same path", () => {
+    expect(isPathWithinOrEqual(["tips", "bash"], ["tips", "bash"])).toBe(true);
+  });
+
+  it("is true for a descendant path", () => {
+    expect(isPathWithinOrEqual(["tips"], ["tips", "bash", "fc"])).toBe(true);
+  });
+
+  it("is true for the root as ancestor of any path", () => {
+    expect(isPathWithinOrEqual([], ["tips"])).toBe(true);
+    expect(isPathWithinOrEqual([], [])).toBe(true);
+  });
+
+  it("is false for a sibling or unrelated path", () => {
+    expect(isPathWithinOrEqual(["tips"], ["with-rating"])).toBe(false);
+    expect(isPathWithinOrEqual(["tips", "bash"], ["tips"])).toBe(false);
+  });
+
+  it("is false when a shared prefix diverges", () => {
+    expect(isPathWithinOrEqual(["tips", "bash"], ["tips", "zsh", "fc"])).toBe(
+      false,
+    );
+  });
+});
+
+describe("adjustPathAfterRemoval", () => {
+  it("shifts a later sibling index down by one", () => {
+    expect(adjustPathAfterRemoval(["items", 1], ["items", 3])).toEqual([
+      "items",
+      2,
+    ]);
+  });
+
+  it("shifts a descendant of a later sibling", () => {
+    expect(
+      adjustPathAfterRemoval(["items", 1], ["items", 3, "child"]),
+    ).toEqual(["items", 2, "child"]);
+  });
+
+  it("leaves an earlier sibling unchanged", () => {
+    expect(adjustPathAfterRemoval(["items", 2], ["items", 0])).toEqual([
+      "items",
+      0,
+    ]);
+  });
+
+  it("leaves an unrelated path unchanged", () => {
+    expect(adjustPathAfterRemoval(["items", 1], ["tips", "bash"])).toEqual([
+      "tips",
+      "bash",
+    ]);
+  });
+
+  it("leaves an object removal's siblings unchanged", () => {
+    expect(adjustPathAfterRemoval(["tips", "bash"], ["tips", "zsh"])).toEqual([
+      "tips",
+      "zsh",
+    ]);
+  });
+
+  it("leaves a path shorter than the removed parent unchanged", () => {
+    expect(adjustPathAfterRemoval(["items", 1], ["items"])).toEqual(["items"]);
   });
 });

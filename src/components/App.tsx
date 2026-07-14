@@ -4,12 +4,14 @@ import type { RepoConfig } from "../auth/repoConfig.ts";
 import { useAuth } from "../auth/useAuth.ts";
 import { useDocument } from "../app/useDocument.ts";
 import type { JsonObject } from "../domain/types.ts";
+import type { TrashDocument } from "../domain/trash.ts";
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
 import { TreeBrowser } from "./TreeBrowser.tsx";
+import { TrashView } from "./TrashView.tsx";
 
 type LoadState =
   | { phase: "idle" }
@@ -20,6 +22,7 @@ type LoadState =
       config: RepoConfig;
       repository: Repository;
       document: JsonObject;
+      trash: TrashDocument;
       sha: string;
     }
   | { phase: "error"; message: string };
@@ -64,6 +67,7 @@ export function App() {
         config,
         repository,
         document: result.value.document,
+        trash: result.value.trash,
         sha: result.value.sha,
       });
     });
@@ -93,6 +97,7 @@ export function App() {
               config,
               repository: createGithubRepository(config, auth.getAccessToken),
               document: loaded.document,
+              trash: loaded.trash,
               sha: loaded.sha,
             });
           }}
@@ -141,14 +146,32 @@ function ReadyApp({
   const documentState = useDocument(state.document, {
     repository: state.repository,
     initialSha: state.sha,
+    initialTrash: state.trash,
   });
+  const [showTrash, setShowTrash] = useState(false);
   return (
     <main>
       <h1>Notes</h1>
       <button type="button" onClick={onSignOut}>
         Sign out
       </button>
-      <TreeBrowser state={documentState} />
+      {!showTrash && (
+        <button type="button" onClick={() => setShowTrash(true)}>
+          Trash ({documentState.trash.records.length})
+        </button>
+      )}
+      {showTrash ? (
+        <TrashView
+          document={documentState.document}
+          trash={documentState.trash}
+          recover={documentState.recover}
+          permanentlyDeleteTrash={documentState.permanentlyDeleteTrash}
+          emptyTrash={documentState.emptyTrash}
+          onClose={() => setShowTrash(false)}
+        />
+      ) : (
+        <TreeBrowser state={documentState} />
+      )}
     </main>
   );
 }

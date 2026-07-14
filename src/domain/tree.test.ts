@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  copy,
   createArrayElement,
   createObjectEntry,
   getAtPath,
+  insertArrayElementAt,
   listChildren,
+  move,
+  removeEntry,
   renameKey,
   reorderArrayElement,
   setValueAtPath,
@@ -281,6 +285,234 @@ describe("reorderArrayElement", () => {
     const result = reorderArrayElement(doc, ["with-rating"], 0, 5);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe("index-out-of-range");
+    expect(doc).toEqual(sample());
+  });
+});
+
+describe("removeEntry", () => {
+  it("removes an object entry, cloning containers along the path", () => {
+    const doc = sample();
+    const result = removeEntry(doc, ["hardinfo"]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.value).toBe(
+        "The ultimate system information viewer",
+      );
+      expect(getAtPath(result.value.document, ["hardinfo"])).toBeUndefined();
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("removes an array element, shifting later elements down", () => {
+    const doc = sample();
+    const result = removeEntry(doc, ["with-rating", 0]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.value).toBe("#! /bin/bash");
+      expect(getAtPath(result.value.document, ["with-rating"])).toEqual([
+        "pytest -v",
+      ]);
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("fails on a nonexistent path, without mutating", () => {
+    const doc = sample();
+    const result = removeEntry(doc, ["nope"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("not-found");
+    expect(doc).toEqual(sample());
+  });
+});
+
+describe("move", () => {
+  it("moves an object entry into another object, reusing its own key", () => {
+    const doc = sample();
+    const result = move(doc, ["hardinfo"], ["tips", "bash"]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["hardinfo"])).toBeUndefined();
+      expect(getAtPath(result.value, ["tips", "bash", "hardinfo"])).toBe(
+        "The ultimate system information viewer",
+      );
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("moves an array element into an object under an explicit key", () => {
+    const doc = sample();
+    const result = move(doc, ["with-rating", 0], ["tips"], "note");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["with-rating"])).toEqual(["pytest -v"]);
+      expect(getAtPath(result.value, ["tips", "note"])).toBe("#! /bin/bash");
+    }
+  });
+
+  it("moves an object entry into an array by appending", () => {
+    const doc = sample();
+    const result = move(doc, ["hardinfo"], ["with-rating"]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["with-rating"])).toEqual([
+        "#! /bin/bash",
+        "pytest -v",
+        "The ultimate system information viewer",
+      ]);
+    }
+  });
+
+  it("adjusts the destination for a later sibling shifted by removal", () => {
+    const doc: JsonObject = { items: ["a", "b", { x: 1 }, { y: 2 }] };
+    const result = move(doc, ["items", 1], ["items", 3], "b-key");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toEqual([
+        "a",
+        { x: 1 },
+        { y: 2, "b-key": "b" },
+      ]);
+    }
+  });
+
+  it("rejects moving the document root", () => {
+    const doc = sample();
+    const result = move(doc, [], ["tips"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("cannot-move-root");
+    expect(doc).toEqual(sample());
+  });
+
+  it("rejects moving a container into itself, without mutating", () => {
+    const doc = sample();
+    const result = move(doc, ["tips"], ["tips"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("cannot-move-into-descendant");
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("rejects moving a container into its own descendant, without mutating", () => {
+    const doc = sample();
+    const result = move(doc, ["tips"], ["tips", "bash"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.kind).toBe("cannot-move-into-descendant");
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("rejects a destination key that already exists, without mutating", () => {
+    const doc = sample();
+    const result = move(doc, ["hardinfo"], [], "tips");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("duplicate-key");
+    expect(doc).toEqual(sample());
+  });
+
+  it("requires an explicit key when moving an array element into an object", () => {
+    const doc = sample();
+    const result = move(doc, ["with-rating", 0], ["tips"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("empty-key");
+    expect(doc).toEqual(sample());
+  });
+});
+
+describe("copy", () => {
+  it("duplicates a value without removing the source", () => {
+    const doc = sample();
+    const result = copy(doc, ["tips"], [], "tips-copy");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["tips-copy"])).toEqual(
+        getAtPath(doc, ["tips"]),
+      );
+      expect(getAtPath(result.value, ["tips", "bash", "fc"])).toBe(
+        "Puts recent history in editor",
+      );
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("clones nested containers instead of sharing references", () => {
+    const doc = sample();
+    const result = copy(doc, ["tips"], [], "tips-copy");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["tips-copy", "bash"])).not.toBe(
+        getAtPath(result.value, ["tips", "bash"]),
+      );
+    }
+  });
+
+  it("allows copying a container into its own descendant without a cycle", () => {
+    const doc = sample();
+    const result = copy(doc, ["tips"], ["tips", "bash"], "self-copy");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(() => JSON.stringify(result.value)).not.toThrow();
+      expect(getAtPath(result.value, [
+        "tips",
+        "bash",
+        "self-copy",
+        "bash",
+        "fc",
+      ])).toBe("Puts recent history in editor");
+    }
+  });
+
+  it("rejects a destination key that already exists, without mutating", () => {
+    const doc = sample();
+    const result = copy(doc, ["hardinfo"], [], "tips");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("duplicate-key");
+    expect(doc).toEqual(sample());
+  });
+
+  it("fails on a nonexistent source, without mutating", () => {
+    const doc = sample();
+    const result = copy(doc, ["nope"], []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("not-found");
+    expect(doc).toEqual(sample());
+  });
+});
+
+describe("insertArrayElementAt", () => {
+  it("inserts at a given position, shifting later elements up", () => {
+    const doc = sample();
+    const result = insertArrayElementAt(doc, ["with-rating"], 1, "middle");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["with-rating"])).toEqual([
+        "#! /bin/bash",
+        "middle",
+        "pytest -v",
+      ]);
+    }
+    expect(doc).toEqual(sample());
+  });
+
+  it("clamps an out-of-range index to the array's end", () => {
+    const doc = sample();
+    const result = insertArrayElementAt(doc, ["with-rating"], 99, "end");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getAtPath(result.value, ["with-rating"])).toEqual([
+        "#! /bin/bash",
+        "pytest -v",
+        "end",
+      ]);
+    }
+  });
+
+  it("fails when the destination is not an array, without mutating", () => {
+    const doc = sample();
+    const result = insertArrayElementAt(doc, ["tips"], 0, "value");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("not-array");
     expect(doc).toEqual(sample());
   });
 });

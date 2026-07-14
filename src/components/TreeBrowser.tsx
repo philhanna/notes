@@ -1,5 +1,9 @@
-import type { DocumentState } from "../app/useDocument.ts";
+import type { DocumentState, MutationError } from "../app/useDocument.ts";
+import { resolvePointer } from "../domain/path.ts";
+import { err } from "../domain/result.ts";
+import type { Result } from "../domain/result.ts";
 import { getAtPath } from "../domain/tree.ts";
+import type { JsonObject, Path } from "../domain/types.ts";
 import { isJsonArray } from "../domain/types.ts";
 import { Breadcrumbs } from "./Breadcrumbs.tsx";
 import { ChildRow } from "./ChildRow.tsx";
@@ -21,10 +25,30 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     rename,
     setValue,
     reorder,
+    move,
+    copy,
+    deleteEntry,
   } = state;
 
   const current = getAtPath(document, currentPath);
   const isArray = isJsonArray(current);
+
+  function relocate(
+    kind: "move" | "copy",
+    path: Path,
+    destinationPointer: string,
+    newKey: string | undefined,
+  ): Promise<Result<JsonObject, MutationError>> {
+    const toParentPath = resolvePointer(document, destinationPointer);
+    if (toParentPath === undefined) {
+      return Promise.resolve(
+        err({ source: "domain", error: { kind: "not-found", path: [] } }),
+      );
+    }
+    return kind === "move"
+      ? move(path, toParentPath, newKey)
+      : copy(path, toParentPath, newKey);
+  }
 
   return (
     <div className="tree-browser">
@@ -49,6 +73,10 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
                 onSetValue={setValue}
                 onMoveUp={() => reorder(index, index - 1)}
                 onMoveDown={() => reorder(index, index + 1)}
+                onRelocate={(kind, destinationPointer, newKey) =>
+                  relocate(kind, entry.path, destinationPointer, newKey)
+                }
+                onDelete={() => deleteEntry(entry.path)}
               />
             );
           })}

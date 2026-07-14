@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Setup } from "./Setup.tsx";
 import type { AuthState } from "../auth/useAuth.ts";
 import { loadRepoConfig } from "../auth/repoConfig.ts";
+import { createFakeGraph, fakeResponse, installFetch } from "../test/fakeGitGraph.ts";
 
 function auth(): AuthState {
   return {
@@ -15,15 +16,6 @@ function auth(): AuthState {
     signOut: vi.fn(),
     getAccessToken: async () => ({ ok: true, value: "test-token" }),
   };
-}
-
-function fakeResponse(status: number, body: unknown): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: () => null },
-    json: async () => body,
-  } as unknown as Response;
 }
 
 async function fillAndSubmit(owner: string, repo: string) {
@@ -40,22 +32,18 @@ afterEach(() => {
 
 describe("Setup", () => {
   it("connects to an existing private, writable repository and saves the config", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url.endsWith("/repos/philhanna/notes-data")) {
-          return fakeResponse(200, {
+    const graph = createFakeGraph({ hardinfo: "system info" });
+    installFetch(graph, [
+      {
+        when: (url) => url.endsWith("/repos/philhanna/notes-data"),
+        respond: () =>
+          fakeResponse(200, {
             private: true,
             default_branch: "main",
             permissions: { push: true },
-          });
-        }
-        return fakeResponse(200, {
-          content: btoa(JSON.stringify({ hardinfo: "system info" }) + "\n"),
-          sha: "abc123",
-        });
-      }),
-    );
+          }),
+      },
+    ]);
 
     const onReady = vi.fn();
     render(<Setup auth={auth()} onReady={onReady} />);
@@ -63,7 +51,11 @@ describe("Setup", () => {
 
     expect(onReady).toHaveBeenCalledWith(
       { owner: "philhanna", repo: "notes-data", branch: "main" },
-      { document: { hardinfo: "system info" }, sha: "abc123" },
+      {
+        document: { hardinfo: "system info" },
+        trash: { version: 1, records: [] },
+        sha: graph.getHead(),
+      },
     );
     expect(loadRepoConfig()).toEqual({
       owner: "philhanna",

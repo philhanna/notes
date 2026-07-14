@@ -35,16 +35,18 @@ export function decodePointerSegments(pointer: string): string[] {
 const ARRAY_INDEX = /^(0|[1-9]\d*)$/;
 
 /**
- * Walks `doc` following a JSON Pointer string, producing the typed Path
- * (array indices as numbers, object keys as strings) that resolvePointer
- * found along the way, or `undefined` if the pointer does not resolve to
- * an existing location in `doc`.
+ * Walks `doc` following raw (unescaped) JSON Pointer segments, producing the
+ * typed Path (array indices as numbers, object keys as strings) found along
+ * the way, or `undefined` if the segments do not resolve to an existing
+ * location in `doc`. Shared by resolvePointer (whole-pointer resolution) and
+ * callers that only have a pointer's parent segments, since the leaf they
+ * care about may not exist in `doc` yet (for example, resolving a trash
+ * record's original parent when recovering it).
  */
-export function resolvePointer(
+export function resolvePointerSegments(
   doc: JsonValue,
-  pointer: string,
+  segments: readonly string[],
 ): Path | undefined {
-  const segments = decodePointerSegments(pointer);
   const path: (string | number)[] = [];
   let current: JsonValue = doc;
   for (const raw of segments) {
@@ -66,4 +68,53 @@ export function resolvePointer(
     }
   }
   return path;
+}
+
+/**
+ * Walks `doc` following a JSON Pointer string, producing the typed Path
+ * (array indices as numbers, object keys as strings) that resolvePointer
+ * found along the way, or `undefined` if the pointer does not resolve to
+ * an existing location in `doc`.
+ */
+export function resolvePointer(
+  doc: JsonValue,
+  pointer: string,
+): Path | undefined {
+  return resolvePointerSegments(doc, decodePointerSegments(pointer));
+}
+
+/**
+ * True when `candidate` is `ancestor` itself or lies within its subtree.
+ * Drives cycle prevention for `move` (design.md 7.2: "A container cannot be
+ * moved into itself or one of its descendants").
+ */
+export function isPathWithinOrEqual(ancestor: Path, candidate: Path): boolean {
+  if (candidate.length < ancestor.length) return false;
+  return ancestor.every((segment, index) => candidate[index] === segment);
+}
+
+/**
+ * Adjusts `path` for having just removed the array element at
+ * `removedPath`. Only a segment inside the same parent array, at an index
+ * greater than the removed one, shifts down by one; everything else
+ * (object removals, unrelated paths, deeper segments under a shifted
+ * index) keeps its own segments unchanged apart from that one entry.
+ */
+export function adjustPathAfterRemoval(
+  removedPath: Path,
+  path: Path,
+): Path {
+  const parentLength = removedPath.length - 1;
+  if (parentLength < 0) return path;
+  if (path.length <= parentLength) return path;
+  const removedIndex = removedPath[parentLength];
+  if (typeof removedIndex !== "number") return path;
+  for (let i = 0; i < parentLength; i++) {
+    if (path[i] !== removedPath[i]) return path;
+  }
+  const segment = path[parentLength];
+  if (typeof segment !== "number" || segment <= removedIndex) return path;
+  const adjusted = path.slice();
+  adjusted[parentLength] = segment - 1;
+  return adjusted;
 }

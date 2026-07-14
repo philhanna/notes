@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { App } from "./App.tsx";
+import { createFakeGraph, fakeResponse, installFetch } from "../test/fakeGitGraph.ts";
 
 const TOKEN_KEY = "notes/auth-token";
 const REPO_CONFIG_KEY = "notes/repo-config";
@@ -22,19 +24,6 @@ function seedRepoConfig() {
     REPO_CONFIG_KEY,
     JSON.stringify({ owner: "philhanna", repo: "notes-data", branch: "main" }),
   );
-}
-
-function fakeResponse(
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
-    json: async () => body,
-  } as unknown as Response;
 }
 
 afterEach(() => {
@@ -64,17 +53,34 @@ describe("App", () => {
   it("loads and shows the document when signed in with a stored repository", async () => {
     seedSignedIn();
     seedRepoConfig();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        fakeResponse(200, {
-          content: btoa(JSON.stringify({ hardinfo: "system info" }) + "\n"),
-          sha: "abc123",
-        }),
-      ),
-    );
+    installFetch(createFakeGraph({ hardinfo: "system info" }));
 
     render(<App />);
+    expect(await screen.findByText("hardinfo")).toBeInTheDocument();
+  });
+
+  it("deletes an entry to trash and recovers it, end to end against the repository", async () => {
+    const user = userEvent.setup();
+    seedSignedIn();
+    seedRepoConfig();
+    const graph = createFakeGraph({ hardinfo: "system info" });
+    installFetch(graph);
+
+    render(<App />);
+    const hardinfoRow = (await screen.findByText("hardinfo")).closest("li")!;
+
+    await user.click(within(hardinfoRow).getByRole("button", { name: "Delete" }));
+    const confirm = screen.getByRole("alertdialog");
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Trash/ }));
+    expect(screen.getByText("/hardinfo")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Recover" }));
+    await user.click(screen.getByRole("button", { name: "Back to notes" }));
+
     expect(await screen.findByText("hardinfo")).toBeInTheDocument();
   });
 

@@ -85,6 +85,56 @@ describe("TreeBrowser", () => {
     expect(values()).toEqual(["2", "1", "3"]);
   });
 
+  it("deletes an entry after confirmation, moving it to trash", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await user.click(within(hardinfoRow).getByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent(/moved to trash/);
+
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
+  });
+
+  it("moves an entry to a chosen destination", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await user.click(
+      within(hardinfoRow).getByRole("button", { name: "Move to…" }),
+    );
+    await user.type(
+      screen.getByLabelText(/Destination/),
+      "/tips",
+    );
+    await user.click(screen.getByRole("button", { name: "Move" }));
+
+    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^tips/ }));
+    expect(screen.getByText("hardinfo")).toBeInTheDocument();
+  });
+
+  it("copies an entry to a chosen destination, leaving the original in place", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await user.click(
+      within(hardinfoRow).getByRole("button", { name: "Copy to…" }),
+    );
+    await user.type(screen.getByLabelText(/Destination/), "/tips");
+    await user.type(screen.getByLabelText(/New key/), "hardinfo-copy");
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(screen.getByText("hardinfo")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^tips/ }));
+    expect(screen.getByText("hardinfo-copy")).toBeInTheDocument();
+  });
+
   it("requires confirmation to replace a scalar with a container, and applies it once confirmed", async () => {
     const user = userEvent.setup();
     render(<Harness />);

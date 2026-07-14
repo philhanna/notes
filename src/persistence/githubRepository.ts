@@ -1,11 +1,25 @@
 import type { AuthError } from "../auth/types.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
 import { parseDocument, serializeDocument } from "../domain/serialize.ts";
+import { EMPTY_TRASH, parseTrash, serializeTrash } from "../domain/trash.ts";
+import type { TrashDocument } from "../domain/trash.ts";
 import type { JsonObject } from "../domain/types.ts";
 import type { Result } from "../domain/result.ts";
 import { err, ok } from "../domain/result.ts";
 import { describeOperation } from "./commitMessage.ts";
 import { githubFetch } from "./githubApi.ts";
+import type { TreeEntry } from "./gitDataApi.ts";
+import {
+  createBlob,
+  createCommit,
+  createRef,
+  createTree,
+  getBlobText,
+  getCommitTreeSha,
+  getHeadCommitSha,
+  getTreeEntries,
+  updateRef,
+} from "./gitDataApi.ts";
 import type {
   LoadedDocument,
   Operation,
@@ -15,11 +29,7 @@ import type {
 import type { PersistError } from "./types.ts";
 
 const DOCUMENT_PATH = "remember.json";
-
-interface ContentsResponseBody {
-  content?: string;
-  sha?: string;
-}
+const TRASH_PATH = ".trash/trash.json";
 
 interface RepoResponseBody {
   private?: boolean;
@@ -28,12 +38,12 @@ interface RepoResponseBody {
 }
 
 /**
- * GitHub-backed Repository adapter (design.md 9). Uses the Contents API
- * only, since Phase 2 writes a single file (remember.json) and the
- * Contents API's conditional `sha` PUT is naturally atomic for that case
- * (proven in spikes 2/3). The Git Data API's multi-file atomic commit
- * becomes necessary once `.trash/trash.json` exists in Phase 3 (design.md
- * "Use the Git Data API for multi-file writes").
+ * GitHub-backed Repository adapter (design.md 9), using the Git Data API
+ * (blob → tree → commit → ref) so remember.json and .trash/trash.json
+ * always update as one atomic commit (design.md 7.3, 9; proven by
+ * spikes/02-atomic-commit.mjs and spikes/03-stale-writer.mjs). `sha`
+ * throughout this module is the branch head commit sha, not a file blob
+ * sha — see repository.ts's LoadedDocument doc comment for why.
  */
 export function createGithubRepository(
   config: RepoConfig,
@@ -65,20 +75,52 @@ export function createGithubRepository(
     });
   }
 
+  /** Reads remember.json and .trash/trash.json from one consistent commit's tree, avoiding a torn read. */
   async function loadDocument(): Promise<Result<LoadedDocument, PersistError>> {
     return withToken(async (accessToken) => {
-      const result = await githubFetch(
-        `/repos/${config.owner}/${config.repo}/contents/${DOCUMENT_PATH}?ref=${config.branch}`,
+      const headResult = await getHeadCommitSha(config, accessToken);
+      if (!headResult.ok) return headResult;
+      const headSha = headResult.value;
+
+      const treeShaResult = await getCommitTreeSha(config, accessToken, headSha);
+      if (!treeShaResult.ok) return treeShaResult;
+
+      const entriesResult = await getTreeEntries(
+        config,
         accessToken,
+        treeShaResult.value,
       );
-      if (!result.ok) return result;
-      const body = result.value.body as ContentsResponseBody;
-      if (typeof body.content !== "string" || typeof body.sha !== "string") {
-        return err({ kind: "malformed" });
+      if (!entriesResult.ok) return entriesResult;
+      const entries = entriesResult.value;
+
+      const documentEntry = entries.find((entry) => entry.path === DOCUMENT_PATH);
+      if (!documentEntry) return err({ kind: "not-found" });
+      const documentTextResult = await getBlobText(
+        config,
+        accessToken,
+        documentEntry.sha,
+      );
+      if (!documentTextResult.ok) return documentTextResult;
+      const parsedDocument = parseDocument(documentTextResult.value);
+      if (!parsedDocument.ok) return err({ kind: "malformed" });
+
+      // .trash/trash.json may not exist yet (a repo from before Phase 3, or
+      // one that has never had a deletion) — that's an empty trash, not an error.
+      const trashEntry = entries.find((entry) => entry.path === TRASH_PATH);
+      let trash: TrashDocument = EMPTY_TRASH;
+      if (trashEntry) {
+        const trashTextResult = await getBlobText(
+          config,
+          accessToken,
+          trashEntry.sha,
+        );
+        if (!trashTextResult.ok) return trashTextResult;
+        const parsedTrash = parseTrash(trashTextResult.value);
+        if (!parsedTrash.ok) return err({ kind: "malformed" });
+        trash = parsedTrash.value;
       }
-      const parsed = parseDocument(decodeBase64(body.content));
-      if (!parsed.ok) return err({ kind: "malformed" });
-      return ok({ document: parsed.value, sha: body.sha });
+
+      return ok({ document: parsedDocument.value, trash, sha: headSha });
     });
   }
 
@@ -87,67 +129,120 @@ export function createGithubRepository(
   > {
     const existing = await loadDocument();
     if (existing.ok || existing.error.kind !== "not-found") return existing;
+
     return withToken(async (accessToken) => {
-      const result = await githubFetch(
-        `/repos/${config.owner}/${config.repo}/contents/${DOCUMENT_PATH}`,
+      const blobResult = await createBlob(
+        config,
         accessToken,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            message: "Initialize remember.json",
-            content: encodeBase64(serializeDocument({})),
-            branch: config.branch,
-          }),
-        },
+        serializeDocument({}),
       );
-      if (!result.ok) return result;
-      const sha = (result.value.body as { content?: ContentsResponseBody })
-        .content?.sha;
-      if (typeof sha !== "string") return err({ kind: "malformed" });
-      return ok({ document: {}, sha });
+      if (!blobResult.ok) return blobResult;
+      const entries: TreeEntry[] = [
+        { path: DOCUMENT_PATH, sha: blobResult.value },
+      ];
+
+      const headResult = await getHeadCommitSha(config, accessToken);
+      if (headResult.ok) {
+        // The repository has commits, just not remember.json yet.
+        const treeShaResult = await getCommitTreeSha(
+          config,
+          accessToken,
+          headResult.value,
+        );
+        if (!treeShaResult.ok) return treeShaResult;
+        const treeResult = await createTree(
+          config,
+          accessToken,
+          treeShaResult.value,
+          entries,
+        );
+        if (!treeResult.ok) return treeResult;
+        const commitResult = await createCommit(
+          config,
+          accessToken,
+          "Initialize remember.json",
+          treeResult.value,
+          headResult.value,
+        );
+        if (!commitResult.ok) return commitResult;
+        const refResult = await updateRef(config, accessToken, commitResult.value);
+        if (!refResult.ok) return refResult;
+        return ok({ document: {}, trash: EMPTY_TRASH, sha: commitResult.value });
+      }
+
+      // No commits at all yet — a brand-new repository created with no
+      // initial README. There is no existing tree/ref to build on.
+      if (headResult.error.kind !== "not-found") return headResult;
+      const treeResult = await createTree(config, accessToken, undefined, entries);
+      if (!treeResult.ok) return treeResult;
+      const commitResult = await createCommit(
+        config,
+        accessToken,
+        "Initialize remember.json",
+        treeResult.value,
+        null,
+      );
+      if (!commitResult.ok) return commitResult;
+      const refResult = await createRef(config, accessToken, commitResult.value);
+      if (!refResult.ok) return refResult;
+      return ok({ document: {}, trash: EMPTY_TRASH, sha: commitResult.value });
     });
   }
 
-  async function saveDocument(
-    document: JsonObject,
+  async function save(
+    state: { document: JsonObject; trash: TrashDocument },
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>> {
     return withToken(async (accessToken) => {
-      const result = await githubFetch(
-        `/repos/${config.owner}/${config.repo}/contents/${DOCUMENT_PATH}`,
-        accessToken,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            message: describeOperation(operation),
-            content: encodeBase64(serializeDocument(document)),
-            sha: baseSha,
-            branch: config.branch,
-          }),
-        },
+      const treeShaResult = await getCommitTreeSha(config, accessToken, baseSha);
+      if (!treeShaResult.ok) return treeShaResult;
+      const baseTreeSha = treeShaResult.value;
+
+      const baseEntriesResult = await getTreeEntries(config, accessToken, baseTreeSha);
+      if (!baseEntriesResult.ok) return baseEntriesResult;
+      const hadTrashFile = baseEntriesResult.value.some(
+        (entry) => entry.path === TRASH_PATH,
       );
-      if (!result.ok) return result;
-      const sha = (result.value.body as { content?: ContentsResponseBody })
-        .content?.sha;
-      if (typeof sha !== "string") return err({ kind: "malformed" });
-      return ok({ sha });
+
+      const documentBlobResult = await createBlob(
+        config,
+        accessToken,
+        serializeDocument(state.document),
+      );
+      if (!documentBlobResult.ok) return documentBlobResult;
+
+      const entries: TreeEntry[] = [
+        { path: DOCUMENT_PATH, sha: documentBlobResult.value },
+      ];
+      // Only writes .trash/trash.json once it's real content, or it already
+      // existed — the file comes into existence lazily on the first delete,
+      // with no separate migration step for repos created before Phase 3.
+      if (hadTrashFile || state.trash.records.length > 0) {
+        const trashBlobResult = await createBlob(
+          config,
+          accessToken,
+          serializeTrash(state.trash),
+        );
+        if (!trashBlobResult.ok) return trashBlobResult;
+        entries.push({ path: TRASH_PATH, sha: trashBlobResult.value });
+      }
+
+      const treeResult = await createTree(config, accessToken, baseTreeSha, entries);
+      if (!treeResult.ok) return treeResult;
+      const commitResult = await createCommit(
+        config,
+        accessToken,
+        describeOperation(operation),
+        treeResult.value,
+        baseSha,
+      );
+      if (!commitResult.ok) return commitResult;
+      const refResult = await updateRef(config, accessToken, commitResult.value);
+      if (!refResult.ok) return refResult;
+      return ok({ sha: commitResult.value });
     });
   }
 
-  return { checkRepository, ensureDocument, loadDocument, saveDocument };
-}
-
-function encodeBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-function decodeBase64(base64: string): string {
-  const binary = atob(base64.replace(/\n/g, ""));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return { checkRepository, ensureDocument, loadDocument, save };
 }

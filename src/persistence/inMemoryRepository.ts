@@ -1,4 +1,6 @@
 import { parseDocument, serializeDocument } from "../domain/serialize.ts";
+import { EMPTY_TRASH, parseTrash, serializeTrash } from "../domain/trash.ts";
+import type { TrashDocument } from "../domain/trash.ts";
 import type { JsonObject } from "../domain/types.ts";
 import type { Result } from "../domain/result.ts";
 import { err, ok } from "../domain/result.ts";
@@ -13,6 +15,7 @@ import type { PersistError } from "./types.ts";
 
 export interface InMemoryRepositoryOptions {
   initialDocument?: JsonObject;
+  initialTrash?: TrashDocument;
   isPrivate?: boolean;
   writable?: boolean;
   defaultBranch?: string;
@@ -21,6 +24,7 @@ export interface InMemoryRepositoryOptions {
 export interface InMemoryCommit {
   message: string;
   document: JsonObject;
+  trash: TrashDocument;
 }
 
 export interface InMemoryRepository extends Repository {
@@ -32,6 +36,7 @@ export function createInMemoryRepository(
   options: InMemoryRepositoryOptions = {},
 ): InMemoryRepository {
   let document: JsonObject | null = options.initialDocument ?? null;
+  let trash: TrashDocument = options.initialTrash ?? EMPTY_TRASH;
   let sha: string | null = document ? "sha-0" : null;
   let commitCount = 0;
   const commits: InMemoryCommit[] = [];
@@ -53,7 +58,7 @@ export function createInMemoryRepository(
 
   async function loadDocument(): Promise<Result<LoadedDocument, PersistError>> {
     if (document === null || sha === null) return err({ kind: "not-found" });
-    return ok({ document, sha });
+    return ok({ document, trash, sha });
   }
 
   async function ensureDocument(): Promise<
@@ -63,21 +68,24 @@ export function createInMemoryRepository(
     if (existing.ok) return existing;
     document = {};
     sha = nextSha();
-    commits.push({ message: "Initialize remember.json", document });
-    return ok({ document, sha });
+    commits.push({ message: "Initialize remember.json", document, trash });
+    return ok({ document, trash, sha });
   }
 
-  async function saveDocument(
-    newDocument: JsonObject,
+  async function save(
+    state: { document: JsonObject; trash: TrashDocument },
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>> {
     if (sha !== baseSha) return err({ kind: "conflict" });
-    const parsed = parseDocument(serializeDocument(newDocument));
-    if (!parsed.ok) return err({ kind: "malformed" });
-    document = parsed.value;
+    const parsedDocument = parseDocument(serializeDocument(state.document));
+    if (!parsedDocument.ok) return err({ kind: "malformed" });
+    const parsedTrash = parseTrash(serializeTrash(state.trash));
+    if (!parsedTrash.ok) return err({ kind: "malformed" });
+    document = parsedDocument.value;
+    trash = parsedTrash.value;
     sha = nextSha();
-    commits.push({ message: describeOperation(operation), document });
+    commits.push({ message: describeOperation(operation), document, trash });
     return ok({ sha });
   }
 
@@ -85,7 +93,7 @@ export function createInMemoryRepository(
     checkRepository,
     ensureDocument,
     loadDocument,
-    saveDocument,
+    save,
     commits,
   };
 }
