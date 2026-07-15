@@ -113,7 +113,6 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
         onCreateEntry={createEntry}
         onCreateElement={createElement}
       />
-
     </div>
   );
 }
