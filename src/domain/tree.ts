@@ -56,11 +56,12 @@ export function listChildren(
   const value = getAtPath(document, path);
   if (value === undefined) return err({ kind: "not-found", path });
   if (isJsonObject(value)) {
+    const keys = Object.keys(value).sort();
     return ok(
-      Object.entries(value).map(([key, entryValue]) => ({
+      keys.map((key) => ({
         kind: "object-entry" as const,
         key,
-        value: entryValue,
+        value: value[key]!,
         path: [...path, key],
       })),
     );

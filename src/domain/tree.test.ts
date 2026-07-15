@@ -41,13 +41,13 @@ describe("getAtPath", () => {
 });
 
 describe("listChildren", () => {
-  it("lists object entries in order", () => {
-    const result = listChildren(sample(), []);
+  it("lists object entries sorted by key", () => {
+    const result = listChildren({ zebra: 1, alpha: 2, middle: 3 }, []);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(
         result.value.map((entry) => entry.kind === "object-entry" && entry.key),
-      ).toEqual(["hardinfo", "tips", "with-rating"]);
+      ).toEqual(["alpha", "middle", "zebra"]);
     }
   });
 

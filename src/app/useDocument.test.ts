@@ -19,7 +19,7 @@ describe("useDocument", () => {
       result.current.children.map((c) =>
         c.kind === "object-entry" ? c.key : c.index,
       ),
-    ).toEqual(["hardinfo", "tips", "list"]);
+    ).toEqual(["hardinfo", "list", "tips"]);
   });
 
   it("navigates into a container and updates children", () => {

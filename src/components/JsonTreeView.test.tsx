@@ -4,6 +4,23 @@ import userEvent from "@testing-library/user-event";
 import { JsonTreeView } from "./JsonTreeView.tsx";
 
 describe("JsonTreeView", () => {
+  it("sorts object entries by key", () => {
+    const { container } = render(
+      <JsonTreeView
+        rootLabel="Current"
+        value={{ zebra: 1, alpha: 2, middle: 3 }}
+        emptyLabel="(none)"
+      />,
+    );
+
+    expect(
+      Array.from(
+        container.querySelectorAll(".child-row__label"),
+        (element) => element.textContent,
+      ),
+    ).toEqual(["alpha", "middle", "zebra"]);
+  });
+
   it("renders an object's keys instead of a JSON blob, and lets the user drill into a subkey", async () => {
     const user = userEvent.setup();
     render(
@@ -33,13 +50,19 @@ describe("JsonTreeView", () => {
   });
 
   it("shows a scalar selected node's value directly", () => {
-    render(<JsonTreeView rootLabel="Current" value="hello" emptyLabel="(none)" />);
+    render(
+      <JsonTreeView rootLabel="Current" value="hello" emptyLabel="(none)" />,
+    );
     expect(screen.getByText('"hello"')).toBeInTheDocument();
   });
 
   it("shows the empty label when the value is undefined", () => {
     render(
-      <JsonTreeView rootLabel="Current" value={undefined} emptyLabel="(none)" />,
+      <JsonTreeView
+        rootLabel="Current"
+        value={undefined}
+        emptyLabel="(none)"
+      />,
     );
     expect(screen.getByText("(none)")).toBeInTheDocument();
   });

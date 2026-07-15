@@ -81,13 +81,17 @@ function JsonTreeChildren({
   node: JsonValue;
   onOpen: (key: string | number) => void;
 }) {
-  const entries: { key: string | number; value: JsonValue }[] = isJsonArray(
-    node,
-  )
-    ? node.map((entryValue, index) => ({ key: index, value: entryValue }))
-    : Object.entries(node as Record<string, JsonValue>).map(
-        ([key, entryValue]) => ({ key, value: entryValue }),
-      );
+  let entries: { key: string | number; value: JsonValue }[];
+  if (isJsonArray(node)) {
+    entries = node.map((entryValue, index) => ({
+      key: index,
+      value: entryValue,
+    }));
+  } else {
+    const object = node as Record<string, JsonValue>;
+    const keys = Object.keys(object).sort();
+    entries = keys.map((key) => ({ key, value: object[key]! }));
+  }
 
   if (entries.length === 0) {
     return (
