@@ -4,8 +4,8 @@ A private, cloud-accessible working memory: a small filesystem-style tree of
 notes, tips, IDs, and reminders, editable from a phone or a desktop browser.
 There is no traditional server or database — the app runs entirely in your
 browser and stores everything in a **private GitHub repository** you control.
-See `docs/design.md` for the full design and `docs/impl.md` for how it was
-built, phase by phase.
+See `docs/design.md` for the full design and `docs/impl.md` for the historical
+implementation record.
 
 The live app is deployed at **<https://philhanna.github.io/notes/>**.
 
@@ -147,7 +147,7 @@ password/secret — see `docs/design.md` section 3.4 for why it exists at all.
 | `public/`                                                      | Files copied as-is into the deployed app: the PWA install manifest, the icon, and the service worker script (see below).                                                             |
 | `relay/`                                                       | Source for the tiny separate "auth relay" helper program (deployed independently to Cloudflare, not part of the main app).                                                           |
 | `e2e/`                                                         | Automated tests that drive the app in a real browser (Playwright).                                                                                                                   |
-| `docs/`                                                        | `design.md` (what the app does and why) and `impl.md` (the build plan and a running log of what's been done). Read these for the full story.                                         |
+| `docs/`                                                        | `design.md` (what the app does and why) and `impl.md` (the historical implementation record). Read these for the full story.                                                         |
 | `.github/workflows/`                                           | Scripts GitHub runs automatically: one checks code quality on every change (`ci.yml`), the other deploys the app to `https://philhanna.github.io/notes/` (`deploy-pages.yml`).       |
 | `index.html`                                                   | The single HTML page the app is loaded into — everything else is added to it by JavaScript.                                                                                          |
 | `harness.html` / `src/harness.tsx`                             | A developer/test-only page used only by the automated browser tests, so they can exercise the note-editing screens without a real GitHub sign-in. Not part of the real deployed app. |
