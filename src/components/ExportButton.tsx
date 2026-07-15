@@ -24,7 +24,7 @@ export function ExportButton({ document: activeDocument }: ExportButtonProps) {
   }
 
   return (
-    <button type="button" onClick={handleExport}>
+    <button className="export-button" type="button" onClick={handleExport}>
       Export JSON
     </button>
   );

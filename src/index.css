@@ -197,6 +197,10 @@ code,
   backdrop-filter: blur(0.5rem);
 }
 
+.export-button {
+  display: none;
+}
+
 .skip-link {
   position: absolute;
   top: -4rem;
