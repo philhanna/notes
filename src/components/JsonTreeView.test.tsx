@@ -35,13 +35,13 @@ describe("JsonTreeView", () => {
     expect(
       screen.queryByText(/"profile":\{"name":"Ada"/),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /profile/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "profile" })).toBeInTheDocument();
     expect(screen.getByText("count")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
 
     // Drilling into "profile" makes it the selected node.
-    await user.click(screen.getByRole("button", { name: /profile/ }));
-    expect(screen.getByRole("button", { name: /tags/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "profile" }));
+    expect(screen.getByRole("button", { name: "tags" })).toBeInTheDocument();
     expect(screen.queryByText("count")).not.toBeInTheDocument();
 
     // The breadcrumb tracks the selection and can navigate back out.

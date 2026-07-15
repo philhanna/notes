@@ -31,7 +31,7 @@ describe("TreeBrowser", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: /^tips/ }));
+    await user.click(screen.getByRole("button", { name: "tips" }));
 
     expect(screen.getByRole("button", { name: /^bash/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notes" })).toBeInTheDocument();

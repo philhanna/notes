@@ -10,7 +10,6 @@ import { ValueEditor } from "./ValueEditor.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { HistoryPanel } from "./HistoryPanel.tsx";
 import { describeError } from "./errors.ts";
-import { describeContainer } from "./containerLabel.ts";
 
 interface ChildRowProps {
   entry: ChildEntry;
@@ -181,7 +180,7 @@ export function ChildRow({
             className="child-row__open"
             onClick={() => onOpen(entry.path)}
           >
-            {label} — {describeContainer(entry.value)}
+            {label}
           </button>
         ) : (
           <span className="child-row__label">{label}</span>

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { getAtPath } from "../domain/tree.ts";
 import type { JsonValue, Path } from "../domain/types.ts";
 import { isContainer, isJsonArray, isJsonObject } from "../domain/types.ts";
-import { describeContainer } from "./containerLabel.ts";
 
 interface JsonTreeViewProps {
   rootLabel: string;
@@ -116,7 +115,7 @@ function JsonTreeChildren({
                   className="child-row__open"
                   onClick={() => onOpen(entry.key)}
                 >
-                  {label} — {describeContainer(entry.value)}
+                  {label}
                 </button>
               ) : (
                 <>
