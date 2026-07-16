@@ -27,11 +27,22 @@ async function openActions(
 }
 
 describe("TreeBrowser", () => {
+  it("shows child counts for object and array containers", () => {
+    render(<Harness />);
+
+    expect(
+      screen.getByRole("button", { name: "tips — 1" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "list — 3" }),
+    ).toBeInTheDocument();
+  });
+
   it("navigates into a container via breadcrumbs and back", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: "tips" }));
+    await user.click(screen.getByRole("button", { name: "tips — 1" }));
 
     expect(screen.getByRole("button", { name: /^bash/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notes" })).toBeInTheDocument();

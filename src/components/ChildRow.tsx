@@ -63,6 +63,11 @@ export function ChildRow({
   const actionsRef = useRef<HTMLDetailsElement>(null);
 
   const label = entry.kind === "object-entry" ? entry.key : `[${entry.index}]`;
+  const childCount = isContainer(entry.value)
+    ? Array.isArray(entry.value)
+      ? entry.value.length
+      : Object.keys(entry.value).length
+    : 0;
   const container = isContainer(entry.value);
 
   function resetToView() {
@@ -180,7 +185,7 @@ export function ChildRow({
             className="child-row__open"
             onClick={() => onOpen(entry.path)}
           >
-            {label}
+            {label} — {childCount}
           </button>
         ) : (
           <span className="child-row__label">{label}</span>
