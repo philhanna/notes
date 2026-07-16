@@ -20,8 +20,6 @@ The application supports:
 - filesystem-style browsing and tree operations;
 - case-insensitive object keys;
 - full-text search across the current tree;
-- Git-backed revision history;
-- restoration of one level without restoring the whole tree; and
 - export of the current tree as ordinary JSON.
 
 The initial version is for one user. Sharing, multi-user permissions,
@@ -81,8 +79,8 @@ problem:
   this text" instantly by scanning an in-memory structure instead of asking
   GitHub every time the user types a search character.
 - **GitHub repository adapter** — a layer of code whose only job is
-  translating what the app wants to do ("save this document", "read this
-  file's history") into the specific HTTP calls GitHub's API requires. This
+  translating what the app wants to do ("save this document", "load the
+  latest document") into the specific HTTP calls GitHub's API requires. This
   keeps the rest of the app's code from needing to know GitHub API details
   directly, which also makes it possible to test the app against a fake
   in-memory repository instead of the real GitHub API (see `docs/impl.md`).
@@ -151,8 +149,8 @@ that device flow still runs into and how it is addressed without one.
 
 The third part is an ordinary private Git repository you create on GitHub.
 It stores the current JSON document and, because Git keeps every past
-version of every commit, it automatically stores the full revision history
-too — there is no separate history database to build or maintain.
+version of every commit, retains earlier states without any application-level
+history feature. Recovery is handled directly through Git when needed.
 
 GitHub Pages can host the static PWA. Its source and deployed JavaScript may be
 public because they contain neither notes nor secret credentials. A private
@@ -163,7 +161,7 @@ only after GitHub authorization.
 The PWA is deployed as an ordinary publicly accessible GitHub Pages site; GitHub
 Enterprise private Pages is not required. Opening the public site reveals only
 the application shell and sign-in screen. It does not reveal repository names,
-note content, history, or access tokens.
+note content, or access tokens.
 
 There is no custom API and no continuously running application server. Tree
 operations execute in the PWA, and persistence uses GitHub's APIs. Section 3.4
@@ -275,9 +273,9 @@ unrelated whitespace churn. Object key spelling and array order are preserved.
 The complete active tree always remains in this one file. The application does
 not split levels or top-level objects into separate files.
 
-The current Git commit SHA identifies a document revision. Within a revision, a
-JSON Pointer path identifies a level or value. The PWA does not store separate
-database IDs.
+The current Git commit SHA identifies the state used for conditional saves.
+Within that state, a JSON Pointer path identifies a level or value. The PWA
+does not store separate database IDs.
 
 ## 6. User interface
 
@@ -290,7 +288,7 @@ The main screen contains:
 - distinct presentation for objects, arrays, and scalars;
 - controls to create a scalar, object, or array;
 - full-text search; and
-- actions for rename, move, copy, delete, and history.
+- actions for rename, move, copy, and delete.
 
 Selecting a container drills into it. Selecting a scalar opens its value editor.
 Breadcrumb segments navigate to ancestors. A wide-screen tree sidebar is an
@@ -350,8 +348,7 @@ from the active tree in one commit. There is no trash and no recovery path in
 the application; the deleted content simply no longer exists in the active
 tree. As with any Git-backed change, earlier commits still contain the
 predecessor state (section 9), but the application exposes no UI to browse or
-restore a deleted entry from it — section 10's restoration only ever replaces
-a value that is still present at its path, not one that was deleted.
+restore a deleted entry from it.
 
 ### 7.4 Saving and simultaneous devices
 
@@ -380,7 +377,7 @@ Device flow needs the public GitHub App client ID but no client secret. Because
 the two `github.com` device-flow endpoints do not support cross-origin browser
 requests, the PWA reaches them through the stateless auth relay described in
 section 3.4, which holds no secret and forwards these two calls unchanged. All
-other GitHub calls (reading and writing repository content, listing history)
+other GitHub calls (reading and writing repository content)
 go directly from the browser to `api.github.com`, which does support them. The
 GitHub App is installed only on the dedicated private notes repository and is
 granted the minimum repository Contents permission needed to read and write it.
@@ -407,22 +404,18 @@ does not authorize it to read that repository; only the user's GitHub token does
 The PWA uses GitHub's APIs to:
 
 - connect to the dedicated private repository created by the user;
-- read `remember.json` and its revision SHA;
-- commit a conditional replacement of the file;
-- list commits affecting the data file; and
-- read an earlier file version for preview or restoration.
+- read `remember.json` and the current commit SHA; and
+- commit a conditional replacement of the file.
 
 Tree mutations occur against a validated in-memory copy. Only a fully serialized
 and validated result is sent to GitHub. A failed write leaves the previous commit
-unchanged, so a move, copy, recursive delete, or restoration cannot become
-partially visible.
+unchanged, so a move, copy, or recursive delete cannot become partially visible.
 
 Commit messages are concise and generated from the operation, for example:
 
 - `Set /where-was-i`
 - `Move /tips/bash/fc to /shell/bash/fc`
 - `Delete /with-rating`
-- `Restore /tips to revision abc1234`
 
 No note values are included in commit messages.
 
@@ -434,32 +427,13 @@ verifies read/write access. It then creates `remember.json` only when that file
 does not already exist. The PWA never creates a repository or changes repository
 visibility.
 
-## 10. History and level restoration
+## 10. Git-owned recovery
 
-Every successful user mutation creates one Git commit. Git history is retained
-indefinitely while the repository exists. The history UI derives relevant
-revisions by comparing the selected JSON Pointer path across commits.
+Every successful user mutation creates one Git commit, but the application does
+not list, preview, compare, restore, undo, or otherwise expose earlier commits.
+If recovery is needed, it is performed directly in the notes-data Git repository.
 
-Every object and array therefore has a logical revision timeline. The user can:
-
-1. open history at the current level;
-2. preview that container as it appeared in an earlier commit;
-3. compare it with the current version; and
-4. restore the earlier container at the same path.
-
-Restoring a level replaces only that object or array and its descendants. It does
-not restore the whole document or change ancestors and siblings. The restoration
-is a new Git commit and does not erase later history, so it can itself be undone.
-Restoration always replaces the selected level as a whole; the user cannot pick
-individual differences from within the historical preview.
-
-A scalar value also has path-based revision history and can be restored
-individually. Rename and move detection may be approximate because Git stores
-document versions rather than stable node identities; generated commit metadata
-helps the UI follow those operations.
-
-Ordinary JSON export contains only the active tree. It omits history.
-There is no import capability.
+Ordinary JSON export contains only the active tree. There is no import capability.
 
 ## 11. Search
 
@@ -471,7 +445,7 @@ active JSON document, the PWA walks the tree and builds an in-memory index over:
 - textual representations of numbers, booleans, and null; and
 - breadcrumb paths.
 
-Matching is case-insensitive. Search excludes historical revisions.
+Matching is case-insensitive and covers only the active document.
 Results show the matching key or excerpt and its breadcrumb and navigate to the
 containing level. The index is rebuilt after loading or modifying the tree.
 
@@ -482,16 +456,16 @@ value-only, and path-only modes are not supported.
 
 ## 12. Backup and durability
 
-The private GitHub repository is both the authoritative store and the revision
-history. No second automated storage system is used. Git commits provide strong
-recovery from ordinary edits and deletions, and JSON export allows manual copies.
+The private GitHub repository is the authoritative store. No second automated
+storage, history, or restoration system is used. Git itself provides recovery
+when handled outside the app, and JSON export allows manual copies.
 
 Export occurs only when the user explicitly requests it. The application does
 not schedule exports, show periodic backup reminders, or automatically copy an
 export elsewhere.
 
 This is not an independent backup. Deleting the repository, losing the GitHub
-account, or a GitHub service failure could affect both current data and history.
+account, or a GitHub service failure could affect both current and earlier data.
 Independent automatic disaster backup is intentionally relaxed to honor the
 single-storage-system constraint.
 
@@ -523,11 +497,9 @@ Automated tests cover:
 - deterministic JSON formatting;
 - conditional Git writes and conflicting device updates;
 - safe retries after uncertain network responses;
-- commit history and path-based revision discovery;
-- isolated restoration of a scalar, object, or array;
 - case-insensitive full-text search and result paths;
 - GitHub device authorization and repository scoping;
-- JSON export without history;
+- active-tree JSON export;
 - responsive Android and Ubuntu layouts; and
 - PWA installation and upgrade behavior.
 

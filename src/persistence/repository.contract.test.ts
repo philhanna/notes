@@ -32,8 +32,6 @@ interface TreeNode {
 interface CommitNode {
   treeSha: string;
   parents: string[];
-  message: string;
-  date: string;
 }
 
 /**
@@ -51,12 +49,9 @@ function stubGithubTransport(initialDocument: Record<string, unknown>) {
   const blobs = new Map<string, string>();
   const trees = new Map<string, TreeNode[]>();
   const commits = new Map<string, CommitNode>();
-  const commitOrder: string[] = [];
   let head = "";
   let counter = 0;
   const nextSha = (prefix: string) => `${prefix}-${++counter}`;
-  const nextDate = () =>
-    new Date(Date.UTC(2026, 0, 1) + counter * 60_000).toISOString();
 
   const blobShaByContent = new Map<string, string>();
   /** Content-addressed, like real Git blobs — identical content reuses the same sha. */
@@ -91,14 +86,9 @@ function stubGithubTransport(initialDocument: Record<string, unknown>) {
     return sha;
   }
 
-  function putCommit(
-    treeSha: string,
-    parents: string[],
-    message = "initial commit",
-  ): string {
+  function putCommit(treeSha: string, parents: string[]): string {
     const sha = nextSha("commit");
-    commits.set(sha, { treeSha, parents, message, date: nextDate() });
-    commitOrder.push(sha);
+    commits.set(sha, { treeSha, parents });
     return sha;
   }
 
@@ -148,48 +138,6 @@ function stubGithubTransport(initialDocument: Record<string, unknown>) {
           return fakeResponse(404, { message: "Not Found" });
         return fakeResponse(200, { content, encoding: "base64" });
       }
-      if (
-        method === "GET" &&
-        path.startsWith("/repos/") &&
-        path.includes("/commits?")
-      ) {
-        const query = new URLSearchParams(path.split("?")[1] ?? "");
-        const filePath = query.get("path") ?? "";
-        const perPage = Number(query.get("per_page") ?? "20");
-        const page = Number(query.get("page") ?? "1");
-
-        function blobShaAt(commitSha: string): string | undefined {
-          const commit = commits.get(commitSha);
-          if (!commit) return undefined;
-          return trees.get(commit.treeSha)?.find((e) => e.path === filePath)
-            ?.sha;
-        }
-
-        const relevant = commitOrder.filter((sha) => {
-          const commit = commits.get(sha)!;
-          const current = blobShaAt(sha);
-          if (current === undefined) return false;
-          const parentSha = commit.parents[0];
-          const previous = parentSha ? blobShaAt(parentSha) : undefined;
-          return current !== previous;
-        });
-        const start = (page - 1) * perPage;
-        const results = relevant
-          .slice()
-          .reverse()
-          .slice(start, start + perPage)
-          .map((sha) => {
-            const commit = commits.get(sha)!;
-            return {
-              sha,
-              commit: {
-                message: commit.message,
-                author: { date: commit.date },
-              },
-            };
-          });
-        return fakeResponse(200, results);
-      }
       if (method === "POST" && path.endsWith("/git/blobs")) {
         const body = JSON.parse(init!.body as string) as { content: string };
         return fakeResponse(201, { sha: putBlob(body.content) });
@@ -213,7 +161,7 @@ function stubGithubTransport(initialDocument: Record<string, unknown>) {
           message?: string;
         };
         return fakeResponse(201, {
-          sha: putCommit(body.tree, body.parents, body.message),
+          sha: putCommit(body.tree, body.parents),
         });
       }
       if (method === "PATCH" && path.endsWith(`/git/refs/heads/${BRANCH}`)) {
@@ -287,58 +235,6 @@ function runContractTests(name: string, createRepository: () => Repository) {
         { kind: "set-value", path: ["hardinfo"] },
       );
       expect(stale).toEqual({ ok: false, error: { kind: "conflict" } });
-    });
-
-    it("lists only commits where the document actually changed, newest first", async () => {
-      const repository = createRepository();
-      const loaded = await repository.loadDocument();
-      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
-
-      // Content-addressed blobs mean re-saving the same document reuses the
-      // same remember.json blob sha, so this commit changed nothing.
-      const unchanged = await repository.save(
-        { document: loaded.value.document },
-        loaded.value.sha,
-        { kind: "set-value", path: ["hardinfo"] },
-      );
-      if (!unchanged.ok) throw new Error("expected unchanged save to succeed");
-
-      const documentChange = await repository.save(
-        { document: { hardinfo: "updated" } },
-        unchanged.value.sha,
-        { kind: "set-value", path: ["hardinfo"] },
-      );
-      if (!documentChange.ok)
-        throw new Error("expected document-change save to succeed");
-
-      const history = await repository.listDocumentHistory();
-      expect(history.ok).toBe(true);
-      if (history.ok) {
-        const shas = history.value.map((entry) => entry.sha);
-        expect(shas[0]).toBe(documentChange.value.sha);
-        expect(shas).not.toContain(unchanged.value.sha);
-      }
-    });
-
-    it("reads the document as it existed at an earlier commit, without disturbing the current save", async () => {
-      const repository = createRepository();
-      const loaded = await repository.loadDocument();
-      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
-
-      const saved = await repository.save(
-        { document: { hardinfo: "updated" } },
-        loaded.value.sha,
-        { kind: "set-value", path: ["hardinfo"] },
-      );
-      if (!saved.ok) throw new Error("expected save to succeed");
-
-      const atOriginal = await repository.loadDocumentAt(loaded.value.sha);
-      expect(atOriginal).toEqual({ ok: true, value: loaded.value.document });
-
-      const current = await repository.loadDocument();
-      expect(current.ok).toBe(true);
-      if (current.ok)
-        expect(current.value.document).toEqual({ hardinfo: "updated" });
     });
   });
 }

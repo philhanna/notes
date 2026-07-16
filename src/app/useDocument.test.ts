@@ -108,27 +108,6 @@ describe("useDocument", () => {
     ).toBe(true);
   });
 
-  it("has no history function without a Repository", () => {
-    const { result } = renderHook(() => useDocument(sample()));
-    expect(result.current.history).toBeUndefined();
-  });
-
-  it("restores a value at a path, even without persistence", async () => {
-    const { result } = renderHook(() => useDocument(sample()));
-    await act(async () => {
-      const outcome = await result.current.restore(
-        ["hardinfo"],
-        "restored value",
-        "revision-1",
-      );
-      expect(outcome.ok).toBe(true);
-    });
-    const child = result.current.children.find(
-      (c) => c.kind === "object-entry" && c.key === "hardinfo",
-    );
-    expect(child).toMatchObject({ value: "restored value" });
-  });
-
   describe("delete", () => {
     it("permanently removes an entry from the active tree", async () => {
       const { result } = renderHook(() => useDocument(sample()));
@@ -307,56 +286,6 @@ describe("useDocument", () => {
       expect(repository.commits).toHaveLength(1);
       expect(repository.commits[0]?.message).toBe("Delete /hardinfo");
       expect(repository.commits[0]?.document).not.toHaveProperty("hardinfo");
-    });
-
-    it("exposes history, finding the revisions relevant to a path", async () => {
-      const repository = createInMemoryRepository({
-        initialDocument: sample(),
-      });
-      const { result } = renderHook(() =>
-        useDocument(sample(), { repository, initialSha: "sha-0" }),
-      );
-
-      await act(async () => {
-        await result.current.setValue(["hardinfo"], "updated");
-      });
-
-      expect(result.current.history).toBeDefined();
-      const history = await result.current.history!(["hardinfo"]);
-      expect(history.ok).toBe(true);
-      if (history.ok) {
-        expect(history.value[0]).toMatchObject({
-          message: "Set /hardinfo",
-          value: "updated",
-        });
-      }
-    });
-
-    it("restores an earlier value at a path with a value-free commit message", async () => {
-      const repository = createInMemoryRepository({
-        initialDocument: sample(),
-      });
-      const { result } = renderHook(() =>
-        useDocument(sample(), { repository, initialSha: "sha-0" }),
-      );
-
-      await act(async () => {
-        const outcome = await result.current.restore(
-          ["hardinfo"],
-          "an earlier value",
-          "sha-0",
-        );
-        expect(outcome.ok).toBe(true);
-      });
-
-      expect(repository.commits).toHaveLength(1);
-      expect(repository.commits[0]?.message).toBe(
-        "Restore /hardinfo to revision sha-0",
-      );
-      const child = result.current.children.find(
-        (c) => c.kind === "object-entry" && c.key === "hardinfo",
-      );
-      expect(child).toMatchObject({ value: "an earlier value" });
     });
   });
 });

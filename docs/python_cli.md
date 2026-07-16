@@ -211,7 +211,7 @@ A Python client should preserve these app invariants:
 - Object keys must be nonempty.
 - Keys in the same object must be unique case-insensitively; `Home` and `home` cannot coexist.
 - Serialize with two-space indentation and a trailing newline.
-- Avoid note values in commit messages because messages appear in history.
+- Avoid note values in commit messages because messages appear in the Git log.
 - Never use `force: true` when updating the branch.
 - On HTTP `409` or `422`, reload the current state and reapply the intended operation.
 - Deletes are permanent: just remove the key from `remember.json`. There is no trash or recovery file to keep in sync.

@@ -14,8 +14,7 @@ export type Operation =
   | { kind: "reorder"; path: Path }
   | { kind: "move"; path: Path; newPath: Path }
   | { kind: "copy"; path: Path; newPath: Path }
-  | { kind: "delete"; path: Path }
-  | { kind: "restore"; path: Path; revisionSha: string };
+  | { kind: "delete"; path: Path };
 
 export interface RepositoryCheck {
   private: boolean;
@@ -23,18 +22,9 @@ export interface RepositoryCheck {
   defaultBranch: string;
 }
 
-/** One commit that changed remember.json, newest first (design.md 9, 10). */
-export interface CommitInfo {
-  sha: string;
-  message: string;
-  /** ISO 8601, from the commit's author date. */
-  date: string;
-}
-
 /**
- * `sha` is the branch head commit sha (design.md 5.4), not a single file's
- * blob sha — it identifies a revision of the whole repository state
- * (`remember.json`), which is what `save`'s conflict detection needs.
+ * `sha` is the branch head commit sha, not a single file's blob sha. It is
+ * used only for conditional saves and conflict detection.
  */
 export interface LoadedDocument {
   document: JsonObject;
@@ -60,15 +50,4 @@ export interface Repository {
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>>;
-  /**
-   * One page of commits that changed remember.json, newest first
-   * (design.md 9's "list commits affecting the data ... files", 11's "fetch
-   * historical versions lazily"). `page` is 1-based; a short page (or an
-   * empty one) means there is nothing further back.
-   */
-  listDocumentHistory(
-    page?: number,
-  ): Promise<Result<CommitInfo[], PersistError>>;
-  /** The document as it existed at `sha` (design.md 10's preview/restoration). */
-  loadDocumentAt(sha: string): Promise<Result<JsonObject, PersistError>>;
 }

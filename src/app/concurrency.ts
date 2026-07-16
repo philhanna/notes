@@ -31,7 +31,5 @@ export function affectedPaths(operation: Operation): Path[] {
       return [operation.path, operation.newPath];
     case "delete":
       return [operation.path];
-    case "restore":
-      return [operation.path];
   }
 }

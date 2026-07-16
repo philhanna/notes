@@ -20,14 +20,4 @@ describe("affectedPaths", () => {
   it("names the deleted path for delete", () => {
     expect(affectedPaths({ kind: "delete", path: ["a"] })).toEqual([["a"]]);
   });
-
-  it("names the target path for restore", () => {
-    expect(
-      affectedPaths({
-        kind: "restore",
-        path: ["tips"],
-        revisionSha: "abc1234",
-      }),
-    ).toEqual([["tips"]]);
-  });
 });

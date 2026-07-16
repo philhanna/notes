@@ -19,7 +19,5 @@ export function describeOperation(operation: Operation): string {
       return `Copy ${encodePointer(operation.path)} to ${encodePointer(operation.newPath)}`;
     case "delete":
       return `Delete ${encodePointer(operation.path)}`;
-    case "restore":
-      return `Restore ${encodePointer(operation.path)} to revision ${operation.revisionSha.slice(0, 7)}`;
   }
 }

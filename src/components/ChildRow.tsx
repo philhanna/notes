@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { DocumentState, MutationError } from "../app/useDocument.ts";
+import type { MutationError } from "../app/useDocument.ts";
 import { encodePointer } from "../domain/path.ts";
 import type { ChildEntry } from "../domain/tree.ts";
 import type { Result } from "../domain/result.ts";
@@ -8,7 +8,6 @@ import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { isContainer } from "../domain/types.ts";
 import { ValueEditor } from "./ValueEditor.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { HistoryPanel } from "./HistoryPanel.tsx";
 import { describeError } from "./errors.ts";
 
 interface ChildRowProps {
@@ -33,11 +32,9 @@ interface ChildRowProps {
     newKey: string | undefined,
   ) => Promise<Result<JsonObject, MutationError>>;
   onDelete: () => Promise<Result<JsonObject, MutationError>>;
-  history?: DocumentState["history"];
-  restore: DocumentState["restore"];
 }
 
-type Mode = "view" | "edit-value" | "rename" | "relocate" | "history";
+type Mode = "view" | "edit-value" | "rename" | "relocate";
 
 /** One row of the tree browser's child list (design.md 6.1). */
 export function ChildRow({
@@ -51,8 +48,6 @@ export function ChildRow({
   onMoveDown,
   onRelocate,
   onDelete,
-  history,
-  restore,
 }: ChildRowProps) {
   const [mode, setMode] = useState<Mode>("view");
   const [relocateKind, setRelocateKind] = useState<"move" | "copy">("move");
@@ -273,18 +268,6 @@ export function ChildRow({
             >
               Delete
             </button>
-            {history && (
-              <button
-                type="button"
-                onClick={() => {
-                  closeActions();
-                  setMode("history");
-                }}
-                disabled={saving}
-              >
-                History
-              </button>
-            )}
           </div>
         </details>
       )}
@@ -356,17 +339,6 @@ export function ChildRow({
             Cancel
           </button>
         </form>
-      )}
-
-      {mode === "history" && history && (
-        <HistoryPanel
-          path={entry.path}
-          label={label}
-          currentValue={entry.value}
-          history={history}
-          restore={restore}
-          onClose={resetToView}
-        />
       )}
 
       {confirmingDelete && (

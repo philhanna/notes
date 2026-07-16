@@ -38,6 +38,18 @@ describe("TreeBrowser", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not offer application-level history", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
+    await openActions(user, hardinfoRow, "hardinfo");
+
+    expect(
+      within(hardinfoRow).queryByRole("button", { name: "History" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("navigates into a container via breadcrumbs and back", async () => {
     const user = userEvent.setup();
     render(<Harness />);

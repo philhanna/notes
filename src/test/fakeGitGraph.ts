@@ -42,19 +42,13 @@ export function createFakeGraph(
 ) {
   const blobs = new Map<string, string>();
   const trees = new Map<string, { path: string; sha: string }[]>();
-  const commits = new Map<
-    string,
-    { treeSha: string; parents: string[]; message: string; date: string }
-  >();
-  const commitOrder: string[] = [];
+  const commits = new Map<string, { treeSha: string; parents: string[] }>();
   let head: string | null = null;
   let counter = 0;
   const nextSha = (prefix: string) => `${prefix}-${++counter}`;
-  const nextDate = () =>
-    new Date(Date.UTC(2026, 0, 1) + counter * 60_000).toISOString();
 
   const blobShaByContent = new Map<string, string>();
-  /** Content-addressed, like real Git blobs — identical content reuses the same sha, which is what listDocumentHistory's "did this path's blob change" filtering depends on. */
+  /** Content-addressed, like real Git blobs — identical content reuses the same sha. */
   function putBlob(content: string): string {
     const existing = blobShaByContent.get(content);
     if (existing !== undefined) return existing;
@@ -81,14 +75,9 @@ export function createFakeGraph(
     );
     return sha;
   }
-  function putCommit(
-    treeSha: string,
-    parents: string[],
-    message = "initial commit",
-  ): string {
+  function putCommit(treeSha: string, parents: string[]): string {
     const sha = nextSha("commit");
-    commits.set(sha, { treeSha, parents, message, date: nextDate() });
-    commitOrder.push(sha);
+    commits.set(sha, { treeSha, parents });
     return sha;
   }
 
@@ -105,39 +94,6 @@ export function createFakeGraph(
           ]
         : [{ path: "README.md", sha: putBlob(encodeBase64("placeholder")) }];
     head = putCommit(putTree(undefined, entries), []);
-  }
-
-  /** Mirrors GitHub's commits-by-path listing: only commits where that path's blob actually changed, newest first, paginated. */
-  function handleListCommits(path: string): Response {
-    const query = new URLSearchParams(path.split("?")[1] ?? "");
-    const filePath = query.get("path") ?? "";
-    const perPage = Number(query.get("per_page") ?? "20");
-    const page = Number(query.get("page") ?? "1");
-
-    function blobShaAt(commitSha: string): string | undefined {
-      const commit = commits.get(commitSha);
-      if (!commit) return undefined;
-      return trees.get(commit.treeSha)?.find((e) => e.path === filePath)?.sha;
-    }
-
-    const relevant = commitOrder.filter((sha) => {
-      const commit = commits.get(sha)!;
-      const current = blobShaAt(sha);
-      if (current === undefined) return false;
-      const parentSha = commit.parents[0];
-      const previous = parentSha ? blobShaAt(parentSha) : undefined;
-      return current !== previous;
-    });
-    const newestFirst = relevant.slice().reverse();
-    const start = (page - 1) * perPage;
-    const results = newestFirst.slice(start, start + perPage).map((sha) => {
-      const commit = commits.get(sha)!;
-      return {
-        sha,
-        commit: { message: commit.message, author: { date: commit.date } },
-      };
-    });
-    return fakeResponse(200, results);
   }
 
   async function handle(url: string, init?: RequestInit): Promise<Response> {
@@ -169,13 +125,6 @@ export function createFakeGraph(
         return fakeResponse(404, { message: "Not Found" });
       return fakeResponse(200, { content, encoding: "base64" });
     }
-    if (
-      method === "GET" &&
-      path.startsWith("/repos/") &&
-      path.includes("/commits?")
-    ) {
-      return handleListCommits(path);
-    }
     if (method === "POST" && path.endsWith("/git/blobs")) {
       const body = JSON.parse(init!.body as string) as { content: string };
       return fakeResponse(201, { sha: putBlob(body.content) });
@@ -199,7 +148,7 @@ export function createFakeGraph(
         message?: string;
       };
       return fakeResponse(201, {
-        sha: putCommit(body.tree, body.parents, body.message),
+        sha: putCommit(body.tree, body.parents),
       });
     }
     if (method === "POST" && path.endsWith("/git/refs")) {

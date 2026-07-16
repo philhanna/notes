@@ -55,22 +55,11 @@ rather than the original open question (see `docs/questions.md`).
 ### Search
 - Must support full-text, case-insensitive search across the current tree,
   matching keys, values, and breadcrumb paths
-- Search must exclude historical revisions
-
-### History and restoration
-- Every successful change must be recorded as a distinct, retrievable
-  revision, retained indefinitely
-- Must support viewing an earlier revision of a specific key or subtree,
-  comparing it to the current version, and restoring just that key or
-  subtree without affecting the rest of the document
-- Restoring must not erase newer history; a restore must itself be
-  undoable by restoring an even earlier or later revision
-
 ### Export
 - Must support exporting the current tree as a standalone JSON file the
   user can save locally
-- Export must contain only the active tree — no history metadata,
-  credentials, or repository settings
+- Export must contain only the active tree — no credentials or repository
+  settings
 
 ### Authentication and security
 - Must authenticate the user against the cloud storage provider without the
@@ -91,9 +80,9 @@ rather than the original open question (see `docs/questions.md`).
   no separate application server or database
 - Must never create a storage repository or change its visibility on the
   user's behalf; the user creates and owns it
-- Must rely on the storage provider's own revision history as the only
-  backup mechanism; the app must not implement a separate automatic backup
-  system
+- Must rely on the storage provider's Git repository as the only backup
+  mechanism; the app must not implement a separate automatic backup,
+  history, or restoration system
 - Concurrent edits from two devices must not silently overwrite one
   another; conflicting writes must be detected, and the user's unsaved
   edit must be preserved when a conflict occurs

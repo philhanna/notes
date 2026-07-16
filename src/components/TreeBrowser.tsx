@@ -29,8 +29,6 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
     move,
     copy,
     deleteEntry,
-    history,
-    restore,
   } = state;
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -99,8 +97,6 @@ export function TreeBrowser({ state }: TreeBrowserProps) {
                   relocate(kind, entry.path, destinationPointer, newKey)
                 }
                 onDelete={() => deleteEntry(entry.path)}
-                history={history}
-                restore={restore}
               />
             );
           })}
