@@ -19,6 +19,7 @@ describe("describePersistError", () => {
     const messages = new Set(
       [
         { kind: "network" as const },
+        { kind: "unavailable" as const },
         { kind: "rate-limit" as const, resetAt: null },
         { kind: "unauthorized" as const },
         { kind: "forbidden" as const },
@@ -27,7 +28,7 @@ describe("describePersistError", () => {
         { kind: "malformed" as const },
       ].map(describePersistError),
     );
-    expect(messages.size).toBe(7);
+    expect(messages.size).toBe(8);
   });
 });
 

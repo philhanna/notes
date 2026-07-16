@@ -71,6 +71,19 @@ describe("checkRepository", () => {
     });
   });
 
+  it("maps a 503 to unavailable, not network", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => fakeResponse(503, { message: "Service Unavailable" })),
+    );
+
+    const repository = createGithubRepository(config, okToken);
+    expect(await repository.checkRepository()).toEqual({
+      ok: false,
+      error: { kind: "unavailable" },
+    });
+  });
+
   it("short-circuits without calling fetch when getAccessToken fails", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -364,6 +377,35 @@ describe("save", () => {
             patchAttempts += 1;
             await graph.handle(url, init); // the write really lands server-side...
             throw new TypeError("Failed to fetch"); // ...but the client never sees the response.
+          }
+          return graph.handle(url, init);
+        }),
+      );
+
+      const repository = createGithubRepository(config, okToken);
+      const result = await repository.save(
+        { document: { hardinfo: "new" } },
+        baseSha,
+        { kind: "set-value", path: ["hardinfo"] },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.sha).toBe(graph.getHead());
+      expect(patchAttempts).toBe(1); // no duplicate write was attempted
+    });
+
+    it("adopts the commit as successful when it landed but GitHub replied with a 5xx", async () => {
+      const graph = createFakeGraph({ hardinfo: "old" });
+      const baseSha = graph.getHead()!;
+      let patchAttempts = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const path = url.replace("https://api.github.com", "");
+          const method = (init?.method as string | undefined) ?? "GET";
+          if (method === "PATCH" && path.endsWith("/git/refs/heads/main")) {
+            patchAttempts += 1;
+            await graph.handle(url, init); // the write really lands server-side...
+            return fakeResponse(503, { message: "Service Unavailable" }); // ...but GitHub's reply is lost.
           }
           return graph.handle(url, init);
         }),

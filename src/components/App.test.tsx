@@ -101,4 +101,31 @@ describe("App", () => {
       screen.getByRole("button", { name: "Sign out" }),
     ).toBeInTheDocument();
   });
+
+  it("recovers from a transient failure via Retry, without needing to sign out", async () => {
+    const user = userEvent.setup();
+    seedSignedIn();
+    seedRepoConfig();
+    const graph = createFakeGraph({ hardinfo: "system info" });
+    let failNextLoad = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (failNextLoad) {
+          failNextLoad = false;
+          return fakeResponse(503, { message: "Service Unavailable" });
+        }
+        return graph.handle(url, init);
+      }),
+    );
+
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /temporarily unavailable/i,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("hardinfo")).toBeInTheDocument();
+  });
 });

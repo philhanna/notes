@@ -44,6 +44,7 @@ export function App() {
   const auth = useAuth();
   const [state, setState] = useState<LoadState>({ phase: "idle" });
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const isOnline = useOnlineStatus();
 
   useEffect(() => {
@@ -86,7 +87,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [auth.status, auth.getAccessToken]);
+  }, [auth.status, auth.getAccessToken, retryCount]);
 
   let body;
   if (auth.status !== "signed-in") {
@@ -110,6 +111,9 @@ export function App() {
     body = (
       <>
         <p role="alert">{state.message}</p>
+        <button type="button" onClick={() => setRetryCount((n) => n + 1)}>
+          Retry
+        </button>
         <button type="button" onClick={auth.signOut}>
           Sign out
         </button>

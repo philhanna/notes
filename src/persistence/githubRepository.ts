@@ -237,13 +237,20 @@ export function createGithubRepository(
         commitResult.value,
       );
       if (refResult.ok) return ok({ sha: commitResult.value });
-      if (refResult.error.kind !== "network") return refResult;
+      if (
+        refResult.error.kind !== "network" &&
+        refResult.error.kind !== "unavailable"
+      ) {
+        return refResult;
+      }
 
       // The ref update's outcome is uncertain (design.md 7.4, Phase 4:
       // "after an uncertain network response, reread the branch head ...
       // before retrying so the same user action does not create duplicate
-      // commits"). The commit this attempt would have advanced the branch
-      // to is already known locally (`commitResult.value`), so comparing it
+      // commits"). A 5xx response is just as uncertain as a dropped
+      // connection — GitHub may have applied the update before failing to
+      // reply. The commit this attempt would have advanced the branch to is
+      // already known locally (`commitResult.value`), so comparing it
       // against the current head settles whether the write actually landed
       // without needing a client-generated operation ID.
       const headAfter = await getHeadCommitSha(config, accessToken);

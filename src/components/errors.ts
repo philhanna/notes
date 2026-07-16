@@ -37,6 +37,8 @@ export function describePersistError(error: PersistError): string {
   switch (error.kind) {
     case "network":
       return "Could not reach GitHub. Check your connection and try again.";
+    case "unavailable":
+      return "GitHub is temporarily unavailable. Try again in a moment.";
     case "rate-limit":
       return "GitHub's rate limit was reached. Try again shortly.";
     case "unauthorized":

@@ -52,5 +52,6 @@ function errorFromResponse(response: Response): PersistError {
   if (response.status === 409 || response.status === 422) {
     return { kind: "conflict" };
   }
+  if (response.status >= 500) return { kind: "unavailable" };
   return { kind: "network" };
 }

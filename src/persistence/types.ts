@@ -5,6 +5,7 @@
  */
 export type PersistError =
   | { kind: "network" }
+  | { kind: "unavailable" }
   | { kind: "rate-limit"; resetAt: number | null }
   | { kind: "unauthorized" }
   | { kind: "forbidden" }
