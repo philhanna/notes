@@ -57,7 +57,6 @@ describe("Setup", () => {
       { owner: "philhanna", repo: "notes-data", branch: "main" },
       {
         document: { hardinfo: "system info" },
-        trash: { version: 1, records: [] },
         sha: graph.getHead(),
       },
     );

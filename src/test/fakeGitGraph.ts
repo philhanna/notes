@@ -1,6 +1,4 @@
 import { vi } from "vitest";
-import { serializeTrash } from "../domain/trash.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import { serializeDocument } from "../domain/serialize.ts";
 import type { JsonObject } from "../domain/types.ts";
 
@@ -41,7 +39,6 @@ export function decodeBase64(base64: string): string {
  */
 export function createFakeGraph(
   initialDocument: Record<string, unknown> | null,
-  initialTrash?: TrashDocument,
 ) {
   const blobs = new Map<string, string>();
   const trees = new Map<string, { path: string; sha: string }[]>();
@@ -107,12 +104,6 @@ export function createFakeGraph(
             },
           ]
         : [{ path: "README.md", sha: putBlob(encodeBase64("placeholder")) }];
-    if (initialTrash) {
-      entries.push({
-        path: ".trash/trash.json",
-        sha: putBlob(encodeBase64(serializeTrash(initialTrash))),
-      });
-    }
     head = putCommit(putTree(undefined, entries), []);
   }
 

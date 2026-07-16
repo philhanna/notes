@@ -1,5 +1,4 @@
 import type { JsonObject, Path } from "../domain/types.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import type { Result } from "../domain/result.ts";
 import type { PersistError } from "./types.ts";
 
@@ -16,9 +15,6 @@ export type Operation =
   | { kind: "move"; path: Path; newPath: Path }
   | { kind: "copy"; path: Path; newPath: Path }
   | { kind: "delete"; path: Path }
-  | { kind: "recover"; path: Path; trashId: string }
-  | { kind: "permanent-delete"; path: Path; trashId: string }
-  | { kind: "empty-trash" }
   | { kind: "restore"; path: Path; revisionSha: string };
 
 export interface RepositoryCheck {
@@ -38,13 +34,10 @@ export interface CommitInfo {
 /**
  * `sha` is the branch head commit sha (design.md 5.4), not a single file's
  * blob sha — it identifies a revision of the whole repository state
- * (`remember.json` and `.trash/trash.json` together), which is what
- * `save`'s conflict detection needs once a trash-only change must be
- * distinguishable from a stale document too.
+ * (`remember.json`), which is what `save`'s conflict detection needs.
  */
 export interface LoadedDocument {
   document: JsonObject;
-  trash: TrashDocument;
   sha: string;
 }
 
@@ -59,14 +52,11 @@ export interface Repository {
   ensureDocument(): Promise<Result<LoadedDocument, PersistError>>;
   loadDocument(): Promise<Result<LoadedDocument, PersistError>>;
   /**
-   * Commits `state.document` and `state.trash` together as one atomic
-   * commit (design.md 7.3, 9), conditional on `baseSha`; a stale `baseSha`
-   * fails with a `conflict` PersistError. Every mutation calls this, even
-   * one that leaves `trash` unchanged, so `sha` always means "the whole
-   * repo's revision."
+   * Commits `state.document` (design.md 9), conditional on `baseSha`; a
+   * stale `baseSha` fails with a `conflict` PersistError.
    */
   save(
-    state: { document: JsonObject; trash: TrashDocument },
+    state: { document: JsonObject },
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>>;

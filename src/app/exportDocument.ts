@@ -9,11 +9,10 @@ export interface DocumentExport {
 
 /**
  * Active-tree-only JSON export (design.md 10, 12): exactly the document's
- * current content, deterministically formatted, with no trash or history
- * metadata — there is nothing else in scope to accidentally include, since
- * this only ever receives the document, never the trash or credentials.
- * `now` is injectable for deterministic tests; the caller passes `new
- * Date()` in real use.
+ * current content, deterministically formatted, with no history metadata —
+ * there is nothing else in scope to accidentally include, since this only
+ * ever receives the document, never credentials. `now` is injectable for
+ * deterministic tests; the caller passes `new Date()` in real use.
  */
 export function exportDocument(
   document: JsonObject,

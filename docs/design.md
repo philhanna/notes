@@ -20,7 +20,6 @@ The application supports:
 - filesystem-style browsing and tree operations;
 - case-insensitive object keys;
 - full-text search across the current tree;
-- trash and recovery;
 - Git-backed revision history;
 - restoration of one level without restoring the whole tree; and
 - export of the current tree as ordinary JSON.
@@ -164,7 +163,7 @@ only after GitHub authorization.
 The PWA is deployed as an ordinary publicly accessible GitHub Pages site; GitHub
 Enterprise private Pages is not required. Opening the public site reveals only
 the application shell and sign-in screen. It does not reveal repository names,
-note content, trash, history, or access tokens.
+note content, history, or access tokens.
 
 There is no custom API and no continuously running application server. Tree
 operations execute in the PWA, and persistence uses GitHub's APIs. Section 3.4
@@ -297,8 +296,8 @@ Selecting a container drills into it. Selecting a scalar opens its value editor.
 Breadcrumb segments navigate to ancestors. A wide-screen tree sidebar is an
 optional enhancement; the mobile layout does not depend on it.
 
-Destructive actions require confirmation. Delete moves content to trash rather
-than immediately removing it from the active tree.
+Destructive actions require confirmation. Delete permanently removes content
+from the active tree; there is no trash or recovery.
 
 ### 6.2 Value input
 
@@ -344,27 +343,15 @@ Copy recursively duplicates a value or container. The destination is never
 overwritten implicitly. Each complete rename, move, or copy is saved in one Git
 commit.
 
-### 7.3 Delete, trash, and recovery
+### 7.3 Delete
 
-Delete removes an entry from the active tree and places its content and original
-path in the tracked `.trash/trash.json` file within the same repository. Each
-trash record contains a stable trash ID, deletion time, original JSON Pointer
-path, value type, and complete deleted content. Deleting a container includes all
-descendants in that one record.
-
-The commit that performs a deletion updates `remember.json` and
-`.trash/trash.json` together. Git therefore exposes either the state before the
-deletion or the complete state after it, never an active-tree change without its
-corresponding trash record.
-
-Recovery restores the original path when available and removes the corresponding
-trash record in the same commit. If its object key is now occupied, the user
-chooses another key or destination. The user may permanently delete individual
-trash records or empty all trash, matching the Ubuntu desktop interaction.
-
-Empty Trash removes content from the current repository state and trash UI, but
-it is not secure erasure: earlier Git commits may still contain the data. Truly
-purging it would require destructive history rewriting and is out of scope.
+Delete permanently removes an entry, and all its descendants for a container,
+from the active tree in one commit. There is no trash and no recovery path in
+the application; the deleted content simply no longer exists in the active
+tree. As with any Git-backed change, earlier commits still contain the
+predecessor state (section 9), but the application exposes no UI to browse or
+restore a deleted entry from it — section 10's restoration only ever replaces
+a value that is still present at its path, not one that was deleted.
 
 ### 7.4 Saving and simultaneous devices
 
@@ -422,7 +409,7 @@ The PWA uses GitHub's APIs to:
 - connect to the dedicated private repository created by the user;
 - read `remember.json` and its revision SHA;
 - commit a conditional replacement of the file;
-- list commits affecting the data and trash files; and
+- list commits affecting the data file; and
 - read an earlier file version for preview or restoration.
 
 Tree mutations occur against a validated in-memory copy. Only a fully serialized
@@ -471,7 +458,7 @@ individually. Rename and move detection may be approximate because Git stores
 document versions rather than stable node identities; generated commit metadata
 helps the UI follow those operations.
 
-Ordinary JSON export contains only the active tree. It omits trash and history.
+Ordinary JSON export contains only the active tree. It omits history.
 There is no import capability.
 
 ## 11. Search
@@ -484,7 +471,7 @@ active JSON document, the PWA walks the tree and builds an in-memory index over:
 - textual representations of numbers, booleans, and null; and
 - breadcrumb paths.
 
-Matching is case-insensitive. Search excludes trash and historical revisions.
+Matching is case-insensitive. Search excludes historical revisions.
 Results show the matching key or excerpt and its breadcrumb and navigate to the
 containing level. The index is rebuilt after loading or modifying the tree.
 
@@ -532,8 +519,7 @@ Automated tests cover:
 - object and array navigation;
 - array append and reordering;
 - rename, move, copy, and cycle prevention;
-- recursive trash, recovery, and Empty Trash behavior;
-- atomic updates of `remember.json` and `.trash/trash.json`;
+- recursive, permanent delete;
 - deterministic JSON formatting;
 - conditional Git writes and conflicting device updates;
 - safe retries after uncertain network responses;
@@ -541,7 +527,7 @@ Automated tests cover:
 - isolated restoration of a scalar, object, or array;
 - case-insensitive full-text search and result paths;
 - GitHub device authorization and repository scoping;
-- JSON export without trash or history;
+- JSON export without history;
 - responsive Android and Ubuntu layouts; and
 - PWA installation and upgrade behavior.
 

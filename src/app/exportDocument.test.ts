@@ -22,10 +22,4 @@ describe("exportDocument", () => {
     const result = exportDocument(document, new Date("2026-07-14T09:30:05Z"));
     expect(result.filename).toBe("notes-export-2026-07-14-09-30-05.json");
   });
-
-  it("never includes trash, since it only ever receives the document", () => {
-    const document = { note: "hello" };
-    const result = exportDocument(document);
-    expect(result.content).not.toContain("trash");
-  });
 });

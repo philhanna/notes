@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGithubRepository } from "./githubRepository.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import {
   createFakeGraph,
   fakeResponse,
@@ -89,7 +88,7 @@ describe("checkRepository", () => {
 });
 
 describe("loadDocument", () => {
-  it("reads remember.json and defaults trash to empty when no trash file exists", async () => {
+  it("reads remember.json's content", async () => {
     const graph = createFakeGraph({ hardinfo: "system info" });
     installFetch(graph);
 
@@ -98,31 +97,8 @@ describe("loadDocument", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.document).toEqual({ hardinfo: "system info" });
-      expect(result.value.trash).toEqual({ version: 1, records: [] });
       expect(result.value.sha).toBe(graph.getHead());
     }
-  });
-
-  it("reads .trash/trash.json when it exists", async () => {
-    const trash: TrashDocument = {
-      version: 1,
-      records: [
-        {
-          id: "t1",
-          deletedAt: "2026-07-14T00:00:00.000Z",
-          originalPath: "/gone",
-          type: "string",
-          value: "gone",
-        },
-      ],
-    };
-    const graph = createFakeGraph({ hardinfo: "system info" }, trash);
-    installFetch(graph);
-
-    const repository = createGithubRepository(config, okToken);
-    const result = await repository.loadDocument();
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.trash).toEqual(trash);
   });
 
   it("reports malformed when remember.json content is not valid JSON", async () => {
@@ -134,30 +110,6 @@ describe("loadDocument", () => {
       if (path.match(/\/git\/blobs\/blob-1$/)) {
         return fakeResponse(200, {
           content: btoa("not json"),
-          encoding: "base64",
-        });
-      }
-      return graph.handle(url, init);
-    });
-
-    const repository = createGithubRepository(config, okToken);
-    expect(await repository.loadDocument()).toEqual({
-      ok: false,
-      error: { kind: "malformed" },
-    });
-  });
-
-  it("reports malformed when a present trash file fails schema validation", async () => {
-    const graph = createFakeGraph(
-      { hardinfo: "x" },
-      { version: 1, records: [] },
-    );
-    const fetchMock = installFetch(graph);
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      const path = url.replace("https://api.github.com", "");
-      if (path.match(/\/git\/blobs\/blob-2$/)) {
-        return fakeResponse(200, {
-          content: btoa(JSON.stringify({ version: 999, records: [] })),
           encoding: "base64",
         });
       }
@@ -207,7 +159,6 @@ describe("ensureDocument", () => {
       ok: true,
       value: {
         document: { hardinfo: "system info" },
-        trash: { version: 1, records: [] },
         sha: graph.getHead(),
       },
     });
@@ -281,7 +232,6 @@ describe("ensureDocument", () => {
       ok: true,
       value: {
         document: {},
-        trash: { version: 1, records: [] },
         sha: "commit-1",
       },
     });
@@ -297,10 +247,7 @@ describe("save", () => {
     const repository = createGithubRepository(config, okToken);
     const baseSha = graph.getHead()!;
     const result = await repository.save(
-      {
-        document: { "where-was-i": "here" },
-        trash: { version: 1, records: [] },
-      },
+      { document: { "where-was-i": "here" } },
       baseSha,
       { kind: "set-value", path: ["where-was-i"] },
     );
@@ -333,72 +280,6 @@ describe("save", () => {
     expect(treeBody.tree.map((e) => e.path)).toEqual(["remember.json"]);
   });
 
-  it("includes .trash/trash.json in the commit when trash is non-empty", async () => {
-    const graph = createFakeGraph({ hardinfo: "old" });
-    const fetchMock = installFetch(graph);
-
-    const repository = createGithubRepository(config, okToken);
-    const baseSha = graph.getHead()!;
-    const trash: TrashDocument = {
-      version: 1,
-      records: [
-        {
-          id: "t1",
-          deletedAt: "2026-07-14T00:00:00.000Z",
-          originalPath: "/gone",
-          type: "string",
-          value: "gone",
-        },
-      ],
-    };
-    const result = await repository.save(
-      { document: { hardinfo: "old" }, trash },
-      baseSha,
-      { kind: "delete", path: ["gone"] },
-    );
-    expect(result.ok).toBe(true);
-
-    const treeCall = fetchMock.mock.calls.find(
-      (call) =>
-        (call[1] as RequestInit | undefined)?.method === "POST" &&
-        (call[0] as string).endsWith("/git/trees"),
-    );
-    const treeBody = JSON.parse(
-      (treeCall![1] as RequestInit).body as string,
-    ) as {
-      tree: { path: string; sha: string }[];
-    };
-    expect(treeBody.tree.map((e) => e.path).sort()).toEqual([
-      ".trash/trash.json",
-      "remember.json",
-    ]);
-  });
-
-  it("omits .trash/trash.json when trash is empty and no trash file existed yet", async () => {
-    const graph = createFakeGraph({ hardinfo: "old" });
-    const fetchMock = installFetch(graph);
-
-    const repository = createGithubRepository(config, okToken);
-    const baseSha = graph.getHead()!;
-    await repository.save(
-      { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
-      baseSha,
-      { kind: "set-value", path: ["hardinfo"] },
-    );
-
-    const treeCall = fetchMock.mock.calls.find(
-      (call) =>
-        (call[1] as RequestInit | undefined)?.method === "POST" &&
-        (call[0] as string).endsWith("/git/trees"),
-    );
-    const treeBody = JSON.parse(
-      (treeCall![1] as RequestInit).body as string,
-    ) as {
-      tree: { path: string; sha: string }[];
-    };
-    expect(treeBody.tree.map((e) => e.path)).toEqual(["remember.json"]);
-  });
-
   it("reports conflict when the ref update is not a fast forward", async () => {
     const graph = createFakeGraph({ hardinfo: "old" });
     installFetch(graph);
@@ -406,14 +287,14 @@ describe("save", () => {
     const repository = createGithubRepository(config, okToken);
     const baseSha = graph.getHead()!;
     const first = await repository.save(
-      { document: { hardinfo: "first" }, trash: { version: 1, records: [] } },
+      { document: { hardinfo: "first" } },
       baseSha,
       { kind: "set-value", path: ["hardinfo"] },
     );
     expect(first.ok).toBe(true);
 
     const stale = await repository.save(
-      { document: { hardinfo: "second" }, trash: { version: 1, records: [] } },
+      { document: { hardinfo: "second" } },
       baseSha,
       { kind: "set-value", path: ["hardinfo"] },
     );
@@ -438,7 +319,7 @@ describe("save", () => {
 
     const repository = createGithubRepository(config, okToken);
     const result = await repository.save(
-      { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
+      { document: { hardinfo: "new" } },
       graph.getHead()!,
       { kind: "set-value", path: ["hardinfo"] },
     );
@@ -457,11 +338,10 @@ describe("save", () => {
     );
 
     const repository = createGithubRepository(config, okToken);
-    const result = await repository.save(
-      { document: { a: 1 }, trash: { version: 1, records: [] } },
-      "sha",
-      { kind: "set-value", path: ["a"] },
-    );
+    const result = await repository.save({ document: { a: 1 } }, "sha", {
+      kind: "set-value",
+      path: ["a"],
+    });
     expect(result).toEqual({ ok: false, error: { kind: "network" } });
   });
 
@@ -491,7 +371,7 @@ describe("save", () => {
 
       const repository = createGithubRepository(config, okToken);
       const result = await repository.save(
-        { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
+        { document: { hardinfo: "new" } },
         baseSha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -517,7 +397,7 @@ describe("save", () => {
 
       const repository = createGithubRepository(config, okToken);
       const result = await repository.save(
-        { document: { hardinfo: "new" }, trash: { version: 1, records: [] } },
+        { document: { hardinfo: "new" } },
         baseSha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -533,10 +413,7 @@ describe("save", () => {
       installFetch(graph);
       const otherDevice = createGithubRepository(config, okToken);
       const otherResult = await otherDevice.save(
-        {
-          document: { hardinfo: "from another device" },
-          trash: { version: 1, records: [] },
-        },
+        { document: { hardinfo: "from another device" } },
         baseSha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -557,10 +434,7 @@ describe("save", () => {
 
       const repository = createGithubRepository(config, okToken);
       const result = await repository.save(
-        {
-          document: { hardinfo: "my update" },
-          trash: { version: 1, records: [] },
-        },
+        { document: { hardinfo: "my update" } },
         baseSha, // the now-stale original base
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -578,7 +452,7 @@ describe("listDocumentHistory", () => {
     const baseSha = graph.getHead()!;
 
     const saved = await repository.save(
-      { document: { hardinfo: "v2" }, trash: { version: 1, records: [] } },
+      { document: { hardinfo: "v2" } },
       baseSha,
       { kind: "set-value", path: ["hardinfo"] },
     );
@@ -601,32 +475,20 @@ describe("listDocumentHistory", () => {
     const repository = createGithubRepository(config, okToken);
     const baseSha = graph.getHead()!;
 
-    const trashOnly = await repository.save(
-      {
-        document: { hardinfo: "v1" },
-        trash: {
-          version: 1,
-          records: [
-            {
-              id: "t1",
-              deletedAt: "2026-07-14T00:00:00.000Z",
-              originalPath: "/gone",
-              type: "string",
-              value: "gone",
-            },
-          ],
-        },
-      },
+    // Content-addressed blobs mean re-saving the same document reuses the
+    // same remember.json blob sha, so this commit changed nothing.
+    const unchanged = await repository.save(
+      { document: { hardinfo: "v1" } },
       baseSha,
-      { kind: "delete", path: ["gone"] },
+      { kind: "set-value", path: ["hardinfo"] },
     );
-    if (!trashOnly.ok) throw new Error("expected save to succeed");
+    if (!unchanged.ok) throw new Error("expected save to succeed");
 
     const history = await repository.listDocumentHistory();
     expect(history.ok).toBe(true);
     if (history.ok) {
       expect(history.value.map((entry) => entry.sha)).not.toContain(
-        trashOnly.value.sha,
+        unchanged.value.sha,
       );
     }
   });
@@ -663,11 +525,10 @@ describe("loadDocumentAt", () => {
     const repository = createGithubRepository(config, okToken);
     const originalSha = graph.getHead()!;
 
-    await repository.save(
-      { document: { hardinfo: "v2" }, trash: { version: 1, records: [] } },
-      originalSha,
-      { kind: "set-value", path: ["hardinfo"] },
-    );
+    await repository.save({ document: { hardinfo: "v2" } }, originalSha, {
+      kind: "set-value",
+      path: ["hardinfo"],
+    });
 
     expect(await repository.loadDocumentAt(originalSha)).toEqual({
       ok: true,

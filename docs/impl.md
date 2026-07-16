@@ -62,53 +62,37 @@ top-level `relay/` (design.md section 2's layout) without changing its
 deployed URL. All Phase 2 exit criteria are met; see the testing notes in
 section 7, including two real findings not apparent from GitHub's docs.
 
-Phase 3 is complete. `src/domain/tree.ts` adds `move`, `copy`, and the shared
-`removeEntry`/`insertAtDestination` primitives, with cycle prevention for
-moving a container into itself or a descendant. `src/domain/trash.ts` defines
-the versioned trash schema (`TrashDocument`/`TrashRecord`), `deleteToTrash`,
-`recoverFromTrash` (original path first, falling back to
-`destination-required` rather than guessing), `permanentlyDelete`, and
-`emptyTrash`, plus its own parse/validate pair so malformed
-`.trash/trash.json` fails closed. `src/persistence/gitDataApi.ts` wraps the
-Git Data API's blob/tree/commit/ref objects, and `githubRepository.ts` now
-builds every commit (`remember.json` and `.trash/trash.json` together) through
-it instead of the Contents API, so `Repository.save` is atomic across both
-files (`LoadedDocument`/`save` changed shape accordingly; `inMemoryRepository.ts`
-and the contract tests moved with it). `src/app/useDocument.ts` adds
-`move`/`copy`/`deleteEntry`/`recover`/`permanentlyDeleteTrash`/`emptyTrash`,
-each committing through the same `Repository.save` as the Phase 1/2 mutators.
-`src/components/ChildRow.tsx` adds Move to…/Copy to…/Delete controls (a
-JSON-Pointer destination field, confirmation before delete); a new
-`TrashView.tsx` lists trash records with Recover (opening an inline
-destination picker on `destination-required`), Delete permanently, and Empty
-Trash (with its own confirmation noting it is not secure Git-history
-erasure), toggled from `App.tsx` alongside the tree browser. All Phase 3 exit
-criteria are met; see the testing notes in section 7.
+Phase 3 is complete. `src/domain/tree.ts` adds `move`, `copy`, `deleteEntry`
+(a permanent, recursive removal — there is no trash or recovery), and the
+shared `removeEntry`/`insertAtDestination` primitives, with cycle prevention
+for moving a container into itself or a descendant. `src/persistence/gitDataApi.ts`
+wraps the Git Data API's blob/tree/commit/ref objects, and `githubRepository.ts`
+builds every commit through it instead of the Contents API. `src/app/useDocument.ts`
+adds `move`/`copy`/`deleteEntry`, each committing through the same
+`Repository.save` as the Phase 1/2 mutators. `src/components/ChildRow.tsx` adds
+Move to…/Copy to…/Delete controls (a JSON-Pointer destination field,
+confirmation before a permanent delete). All Phase 3 exit criteria are met;
+see the testing notes in section 7.
 
 Phase 4 is complete. `src/domain/diff.ts` adds `changedPaths` (the minimal
 set of paths where two document snapshots differ — object keys compared
 individually so edits to different keys are disjoint; equal-length arrays
 compared index by index; any other array difference conservatively reports
 the whole array as changed) and `pathsOverlap`/`anyPathOverlaps`.
-`src/domain/trash.ts` adds `changedTrashIds`, the same idea for trash
-records, which are identified by stable ID rather than array position so
-two devices deleting different entries never conflict with each other.
-`src/app/concurrency.ts` adds `affectedPaths`, mapping each `Operation`
-kind to the document paths and trash IDs it reads or writes (`recover` and
-`permanent-delete` needed a `trashId` field added to their `Operation`
-variant for this). `src/app/useDocument.ts`'s three separate commit helpers
-are replaced by one `commitCore`: every mutator now supplies a `recompute`
-function of `(document, trash) => Result<...>` instead of a precomputed
-result, so it can be reapplied against a freshly reloaded base. On a stale
-`sha`, `commitCore` reloads the latest revision, diffs it against local
-state, and either reapplies the operation once against the fresh base when
-the changed paths are disjoint from the operation's affected paths
-(design.md 7.4), or — on overlap — refreshes local `document`/`trash`/`sha`
-to the latest revision and returns a new `MutationError` variant,
-`{source: "conflict", documentChanged, trashChanged}`, so the pending input
-the caller already holds survives and a plain re-submission now operates
-against current data. `src/components/errors.ts` adds
-`describeConflictError`, naming the changed locations (never their values).
+`src/app/concurrency.ts` adds `affectedPaths`, mapping each `Operation` kind
+to the document paths it reads or writes. `src/app/useDocument.ts`'s three
+separate commit helpers are replaced by one `asDocumentResult`: every mutator
+now supplies a `recompute` function of `(document) => Result<...>` instead of
+a precomputed result, so it can be reapplied against a freshly reloaded base.
+On a stale `sha`, `asDocumentResult` reloads the latest revision, diffs it
+against local state, and either reapplies the operation once against the
+fresh base when the changed paths are disjoint from the operation's affected
+paths (design.md 7.4), or — on overlap — refreshes local `document`/`sha` to
+the latest revision and returns a new `MutationError` variant,
+`{source: "conflict", documentChanged}`, so the pending input the caller
+already holds survives and a plain re-submission now operates against
+current data. `src/components/errors.ts` adds `describeConflictError`,
+naming the changed locations (never their values).
 `src/persistence/githubRepository.ts`'s `save` handles the case where the
 final ref-update request's *response* is lost (not necessarily the write
 itself): since the candidate commit's sha is already known locally before
@@ -132,7 +116,7 @@ node breadcrumb) and `search` (case-insensitive substring matching against
 those three fields, per design.md 11 — including the fact that a match on an
 ancestor's breadcrumb also surfaces its descendants, since a breadcrumb by
 definition includes its whole ancestor chain). It only ever receives
-`document`, so trash and history have no way to appear in results.
+`document`, so history has no way to appear in results.
 `src/persistence/repository.ts` adds `listDocumentHistory` (one page of
 commits that changed remember.json, newest first) and `loadDocumentAt` (the
 document as of an arbitrary commit) to the `Repository` port, plus a
@@ -157,11 +141,11 @@ predecessor to compare against, so it is conservatively always reported as
 relevant. `src/app/useDocument.ts` exposes `history` (only when a
 `Repository` is present — there is no local-fixture equivalent of GitHub
 commit history) and `restore`, which replaces the value at a path with an
-earlier revision's value through the same `commitCore`/conflict-handling
+earlier revision's value through the same `asDocumentResult`/conflict-handling
 path every other mutator uses, tagged with a `{kind: "restore", path,
 revisionSha}` operation that `commitMessage.ts` renders as `Restore /tips to
 revision abc1234`, matching design.md 9's example exactly.
-`src/app/exportDocument.ts` serializes only `document` (never trash, history,
+`src/app/exportDocument.ts` serializes only `document` (never history,
 credentials, or repository settings — there is no way to pass them in) with
 the same deterministic formatting as every commit, named
 `notes-export-<timestamp>.json`. `src/components/SearchView.tsx`,
@@ -169,7 +153,7 @@ the same deterministic formatting as every commit, named
 opened per entry from `ChildRow.tsx`'s new History action, and for the
 current level from `TreeBrowser.tsx`, per design.md 6.1/10), and
 `ExportButton.tsx` (a plain download, triggered only on click) are wired into
-`App.tsx` alongside the existing tree/trash views. All Phase 5 exit criteria
+`App.tsx` alongside the existing tree view. All Phase 5 exit criteria
 are met; see the testing notes in section 7, including one piece of new
 GitHub API surface this phase could not verify live.
 
@@ -204,8 +188,8 @@ untouched. `src/app/useOnlineStatus.ts` adds a `navigator.onLine` banner in
 `App.tsx` so connectivity loss is reported proactively rather than only on
 the next failed save. `ConfirmDialog.tsx` is now a real modal: it traps
 Tab/Shift+Tab focus, treats Escape as Cancel, and restores focus to whatever
-triggered it. `TreeBrowser.tsx` and `TrashView.tsx` move focus to the
-current level's/view's heading after navigation, since `react-router-dom`
+triggered it. `TreeBrowser.tsx` moves focus to the
+current level's heading after navigation, since `react-router-dom`
 (a listed but, this session confirmed, never-imported dependency) provides
 no router lifecycle to hook — it has been removed rather than left as dead
 weight. `src/index.css` adds a `prefers-reduced-motion` guard, a `min-width`
@@ -272,7 +256,7 @@ Testing added this phase: `@playwright/test` and `@axe-core/playwright`
 (the repository had no committed real-browser test infrastructure before
 this — earlier "Playwright" mentions in this file were one-off spike
 scripts). `src/harness.tsx`/`harness.html` are a dev/test-only entry point
-mounting the real `TreeBrowser`/`ChildRow`/`ConfirmDialog`/`TrashView`
+mounting the real `TreeBrowser`/`ChildRow`/`ConfirmDialog`
 components against `createInMemoryRepository` (the same fake the
 persistence contract tests already use) with a small fixture document —
 extending the codebase's existing "test everything without live GitHub"
@@ -321,7 +305,7 @@ checked off:
 - [x] Phase 0 — Project foundation and risk spikes
 - [x] Phase 1 — Domain model and local tree browser
 - [x] Phase 2 — Authentication, setup, and basic persistence
-- [x] Phase 3 — Complete tree operations and trash
+- [x] Phase 3 — Complete tree operations
 - [x] Phase 4 — Concurrency and resilient saving
 - [x] Phase 5 — Search, history, restoration, and export
 - [ ] Phase 6 — PWA hardening, accessibility, and release (partial — see above)
@@ -366,7 +350,7 @@ Organize the implementation around replaceable, testable modules:
 
 ```text
 src/
-  domain/       JSON tree, paths, validation, mutations, trash, search
+  domain/       JSON tree, paths, validation, mutations, search
   persistence/  repository interface, GitHub adapter, serialization
   auth/         GitHub device flow and token lifecycle
   app/          application state and operation orchestration
@@ -412,10 +396,10 @@ Before proceeding, prove the following against a disposable private repository:
    locally (relay running under `wrangler dev`, real device/user code returned
    to a foreign-origin browser call); not yet proven from an actual deployed
    Pages + relay origin (see item 4).
-2. The app can read the repository head and atomically commit both
-   `remember.json` and `.trash/trash.json` by creating Git blobs, a tree, and a
-   commit, then conditionally advancing the branch ref. **Result: confirmed**
-   against `philhanna/notes-data` — one commit created both files together.
+2. The app can read the repository head and commit `remember.json` by
+   creating a Git blob, a tree, and a commit, then conditionally advancing
+   the branch ref. **Result: confirmed** against `philhanna/notes-data` —
+   one commit created the file this way.
 3. A stale writer cannot advance that ref and can distinguish a conflict from a
    network or authorization failure. **Result: confirmed** — a second writer
    using the same base commit was rejected with `422 Update is not a fast
@@ -431,9 +415,10 @@ Before proceeding, prove the following against a disposable private repository:
    credentials` response, not a blocked request). See
    `spikes/fixtures/04-cors.json`.
 
-Use the Git Data API for multi-file writes; the Contents API alone cannot make
-the active document and trash update one atomic commit. Capture request/response
-fixtures with credentials and note content removed. If any spike fails, revise
+Use the Git Data API to build the commit directly (blob → tree → commit →
+ref) for full control over the conditional write and commit metadata. Capture
+request/response fixtures with credentials and note content removed. If any
+spike fails, revise
 the relevant design assumption before building dependent features — spike 1
 did fail in its original form, and `docs/design.md` section 3.4 is that
 revision.
@@ -542,25 +527,18 @@ Exit criteria:
 - [x] connectivity, rate-limit, authorization, malformed-data, and write errors are
   distinct and preserve the user's unsaved input.
 
-### Phase 3 — Complete tree operations and trash
+### Phase 3 — Complete tree operations
 
-Implement copy, move, recursive delete, recovery, permanent deletion, and Empty
-Trash. Enforce cycle prevention, destination validation, and no implicit
-overwrite. Create a versioned trash schema with stable IDs, UTC timestamps,
-original JSON Pointer paths, types, and complete deleted values.
-
-Treat active-tree and trash changes as one persistence transaction. Recovery
-must either restore the entire record and remove it from trash or do neither.
-Add UI for choosing a new destination when the original path is occupied and
-clearly explain that Empty Trash is not secure Git-history erasure.
+Implement copy, move, and recursive, permanent delete. Enforce cycle
+prevention, destination validation, and no implicit overwrite. Deleting an
+entry, including all descendants for a container, removes it from the active
+tree in the same commit — there is no trash or recovery path.
 
 Exit criteria:
 
 - [x] all operations are atomic at the Git commit level;
-- [x] recursive operations and cycle prevention have focused domain tests;
-- [x] malformed trash data fails safely without damaging the active document; and
-- [x] end-to-end tests cover delete, conflict on recovery, alternate destination,
-  permanent deletion, and Empty Trash.
+- [x] recursive operations and cycle prevention have focused domain tests; and
+- [x] end-to-end tests cover delete, move, copy, and destination conflicts.
 
 ### Phase 4 — Concurrency and resilient saving
 
@@ -587,9 +565,9 @@ Exit criteria:
 ### Phase 5 — Search, history, restoration, and export
 
 Build the in-memory search index after load and after each successful mutation.
-Index keys, scalar text, and breadcrumbs; exclude trash and history. Confirm
-acceptable interaction time using generated documents substantially larger than
-the current sample before adding a search library.
+Index keys, scalar text, and breadcrumbs; exclude history. Confirm acceptable
+interaction time using generated documents substantially larger than the
+current sample before adding a search library.
 
 Add history retrieval, path-based change detection, preview and comparison, and
 restoration. Fetch historical versions lazily and bound concurrent GitHub calls
@@ -598,7 +576,7 @@ its historical value to the current document and creating a new commit; never
 rewind the branch.
 
 Implement active-tree JSON export as a local download with deterministic
-formatting. Ensure trash, history metadata, credentials, and repository settings
+formatting. Ensure history metadata, credentials, and repository settings
 are excluded.
 
 Exit criteria:
@@ -663,7 +641,7 @@ Maintain a test pyramid aligned with the module boundaries:
   and a mocked GitHub transport; separately run a small live-repository suite.
 - **Component tests:** navigation, forms, validation, confirmation, preserved
   input, focus behavior, and error presentation.
-- **End-to-end tests:** authorization seams, setup, CRUD, trash, conflict,
+- **End-to-end tests:** authorization seams, setup, CRUD, conflict,
   uncertain writes, history, restoration, export, installation, and update.
 - **Security checks:** secret scanning, dependency audit, CSP review, token and
   content redaction assertions, and inspection of browser storage and caches.
@@ -686,8 +664,6 @@ least-privilege credentials; do not expose those credentials to pull requests.
   actions.
 - Keep dialogs and pending editor state in memory during a session, and clear
   sensitive state on sign-out.
-- Add schema/version fields to application-owned auxiliary data such as trash
-  and operation metadata; `remember.json` remains ordinary JSON.
 - Avoid premature optimization. Measure generated large trees on target phones
   before adding workers, virtualization, or a third-party search index.
 - Keep the auth relay (`docs/design.md` section 3.4) a stateless forwarder for
@@ -822,7 +798,7 @@ already cover. `src/domain/diff.test.ts` and `src/app/concurrency.test.ts`
 cover `changedPaths`/`pathsOverlap`/`affectedPaths` directly (identical
 documents, an added/removed/changed key, nested objects, equal- and
 unequal-length arrays, a type change, and every `Operation` kind's affected
-paths). `src/app/useDocument.test.ts` drives `commitCore` through
+paths). `src/app/useDocument.test.ts` drives `asDocumentResult` through
 `createInMemoryRepository` with a real second write injected mid-test to
 simulate a concurrent device: a stale `sha` with no actual underlying change
 auto-heals and commits, a disjoint concurrent edit is silently reapplied and
@@ -900,13 +876,10 @@ render and behave correctly in an actual browser.
    (see Phase 2 above); verified live against `philhanna/notes-data` both
    non-interactively and through a real device-flow sign-in.
 9. ~~Check off Phase 2.~~ Done — all exit criteria met. Next: Phase 3
-   (complete tree operations and trash) — move, copy, recursive delete,
-   recovery, permanent deletion, and Empty Trash, with the active-tree and
-   `.trash/trash.json` writes as one Git Data API commit (design.md 7.3,
-   9), since Phase 2 only had one file to write conditionally.
-10. ~~Implement move, copy, delete-to-trash, recovery, permanent deletion,
-    and Empty Trash on the new Git Data API persistence layer; check off
-    Phase 3.~~ Done — all exit criteria met.
+   (complete tree operations) — move, copy, and recursive, permanent delete,
+   built on the Git Data API (design.md 7.3, 9).
+10. ~~Implement move, copy, and recursive, permanent delete on the Git Data
+    API persistence layer; check off Phase 3.~~ Done — all exit criteria met.
 11. ~~Implement the reload/diff/reapply-once conflict handling and the
     uncertain-ref-update head comparison; check off Phase 4.~~ Done — all
     exit criteria met, on the mocked-test basis described just above.

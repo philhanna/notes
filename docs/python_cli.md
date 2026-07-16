@@ -35,20 +35,17 @@ GET /repos/OWNER/REPO/git/commits/COMMIT_SHA
   └─ obtains the tree SHA
 
 GET /repos/OWNER/REPO/git/trees/TREE_SHA?recursive=1
-  └─ finds remember.json and .trash/trash.json
+  └─ finds remember.json
 
 GET /repos/OWNER/REPO/git/blobs/BLOB_SHA
-  └─ downloads and Base64-decodes each file
+  └─ downloads and Base64-decodes the file
 ```
 
 That implementation is in [gitDataApi.ts](/home/saspeh/dev/notes/src/persistence/gitDataApi.ts) and [githubRepository.ts](/home/saspeh/dev/notes/src/persistence/githubRepository.ts).
 
-The two relevant files are:
-
-- `remember.json`: the active notes tree.
-- `.trash/trash.json`: deleted items and their recovery metadata.
-
-If your CLI only creates or updates active notes, it generally needs to change only `remember.json`. If it implements the app’s Delete, Recover, or Empty Trash behavior, it must update both files in the same commit.
+The only relevant file is `remember.json`: the active notes tree. There is no
+separate trash or recovery file — a delete simply removes the key from
+`remember.json`.
 
 ## 3. Why saving requires several API calls
 
@@ -66,10 +63,9 @@ Create a commit whose parent is the previously read commit
 Conditionally advance refs/heads/main with force=false
 ```
 
-This matters for two reasons:
-
-- `remember.json` and `.trash/trash.json` can be updated atomically.
-- If the web app or another CLI writes first, GitHub rejects the stale branch update instead of silently overwriting the newer data.
+This matters because if the web app or another CLI writes first, GitHub
+rejects the stale branch update instead of silently overwriting the newer
+data.
 
 The app implements that sequence in [githubRepository.ts](/home/saspeh/dev/notes/src/persistence/githubRepository.ts:239). GitHub documents the underlying [blob](https://docs.github.com/en/rest/git/blobs), [tree](https://docs.github.com/en/rest/git/trees), [commit](https://docs.github.com/en/rest/git/commits), and [reference](https://docs.github.com/en/rest/git/refs) endpoints.
 
@@ -218,6 +214,6 @@ A Python client should preserve these app invariants:
 - Avoid note values in commit messages because messages appear in history.
 - Never use `force: true` when updating the branch.
 - On HTTP `409` or `422`, reload the current state and reapply the intended operation.
-- Deletes should create a valid trash record and update both files atomically; simply removing a key bypasses the app’s Trash feature.
+- Deletes are permanent: just remove the key from `remember.json`. There is no trash or recovery file to keep in sync.
 
 The browser’s authentication relay is unnecessary for a Python CLI using a PAT. It exists only because browsers enforce CORS restrictions on GitHub’s device-flow endpoints; normal Python HTTP requests do not have that restriction. If desired, the CLI could instead implement the same GitHub App device flow and obtain its own app user token, but PAT authentication is substantially simpler for a personal CLI.

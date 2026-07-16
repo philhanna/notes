@@ -5,11 +5,10 @@ import { createInMemoryRepository } from "./persistence/inMemoryRepository.ts";
 import { ExportButton } from "./components/ExportButton.tsx";
 import { SearchView } from "./components/SearchView.tsx";
 import { TreeBrowser } from "./components/TreeBrowser.tsx";
-import { TrashView } from "./components/TrashView.tsx";
 import "./index.css";
 
 /**
- * A dev/test-only entry point that mounts the real tree/trash/search UI
+ * A dev/test-only entry point that mounts the real tree/search UI
  * against an in-memory repository (the same fake the persistence contract
  * tests use) instead of a real GitHub sign-in. Playwright's e2e suite
  * (e2e/harness.spec.ts) uses this to exercise keyboard operation, focus
@@ -32,7 +31,7 @@ export function Harness() {
     repository,
     initialSha: "sha-0",
   });
-  const [view, setView] = useState<"tree" | "trash" | "search">("tree");
+  const [view, setView] = useState<"tree" | "search">("tree");
 
   return (
     <>
@@ -50,16 +49,6 @@ export function Harness() {
           />
           <h1>Notes</h1>
         </header>
-        {view === "trash" && (
-          <TrashView
-            document={documentState.document}
-            trash={documentState.trash}
-            recover={documentState.recover}
-            permanentlyDeleteTrash={documentState.permanentlyDeleteTrash}
-            emptyTrash={documentState.emptyTrash}
-            onClose={() => setView("tree")}
-          />
-        )}
         {view === "search" && (
           <SearchView
             document={documentState.document}
@@ -72,11 +61,6 @@ export function Harness() {
           {view !== "search" && (
             <button type="button" onClick={() => setView("search")}>
               Search
-            </button>
-          )}
-          {view !== "trash" && (
-            <button type="button" onClick={() => setView("trash")}>
-              Trash ({documentState.trash.records.length})
             </button>
           )}
           <ExportButton document={documentState.document} />

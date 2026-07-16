@@ -21,9 +21,7 @@ export type TreeError =
   | { kind: "confirmation-required" }
   | { kind: "cannot-delete-root" }
   | { kind: "cannot-move-root" }
-  | { kind: "cannot-move-into-descendant"; path: Path }
-  | { kind: "trash-record-not-found"; id: string }
-  | { kind: "destination-required" };
+  | { kind: "cannot-move-into-descendant"; path: Path };
 
 export type ChildEntry =
   | { kind: "object-entry"; key: string; value: JsonValue; path: Path }
@@ -249,7 +247,7 @@ export function reorderArrayElement(
  * or array splice), cloning every container along the way like replaceAt.
  * `path` must be non-empty and resolve within `document`; callers that need
  * a specific error for the root case (move, delete) check `path.length ===
- * 0` themselves first. Shared by move (below) and trash.ts's deleteToTrash.
+ * 0` themselves first. Shared by move (below) and useDocument.ts's delete.
  */
 export function removeEntry(
   document: JsonObject,
@@ -278,6 +276,17 @@ export function removeEntry(
     document: replaceAt(document, parentPath, 0, newParent) as JsonObject,
     value,
   });
+}
+
+/** Permanently removes the entry at `path` (design.md 7.3): no trash, no recovery. */
+export function deleteEntry(
+  document: JsonObject,
+  path: Path,
+): Result<JsonObject, TreeError> {
+  if (path.length === 0) return err({ kind: "cannot-delete-root" });
+  const removed = removeEntry(document, path);
+  if (!removed.ok) return removed;
+  return ok(removed.value.document);
 }
 
 /** Deep-clones a JSON value so a document never holds the same object/array
@@ -309,11 +318,9 @@ function defaultKey(
  * `toParentPath`: appends for an array, or uses `key` for an object
  * (empty-key if the source was an array element and no key was supplied).
  * Reuses createObjectEntry/createArrayElement so duplicate-key and other
- * destination validation come for free. Exported for trash.ts's
- * explicit-destination recovery, which resolves a destination the same way
- * move/copy do.
+ * destination validation come for free. Shared by move and copy, below.
  */
-export function insertAtDestination(
+function insertAtDestination(
   document: JsonObject,
   toParentPath: Path,
   value: JsonValue,
@@ -388,24 +395,4 @@ export function copy(
     cloneJsonValue(value),
     defaultKey(newKey, fromPath),
   );
-}
-
-/**
- * Inserts `value` into the array at `parentPath` at `index` (clamped to the
- * array's current length), shifting later elements up. Used only for
- * restoring a trash record to its original array position — ordinary array
- * creation always appends (createArrayElement).
- */
-export function insertArrayElementAt(
-  document: JsonObject,
-  parentPath: Path,
-  index: number,
-  value: JsonValue,
-): Result<JsonObject, TreeError> {
-  const parentResult = requireArray(document, parentPath);
-  if (!parentResult.ok) return parentResult;
-  const clampedIndex = Math.max(0, Math.min(index, parentResult.value.length));
-  const newParent = parentResult.value.slice();
-  newParent.splice(clampedIndex, 0, value);
-  return ok(replaceAt(document, parentPath, 0, newParent) as JsonObject);
 }

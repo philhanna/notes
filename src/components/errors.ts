@@ -29,10 +29,6 @@ export function describeTreeError(error: TreeError): string {
       return "The whole document cannot be moved.";
     case "cannot-move-into-descendant":
       return "A container cannot be moved into itself or one of its contents.";
-    case "trash-record-not-found":
-      return "That trash item no longer exists.";
-    case "destination-required":
-      return "That location isn't available. Choose a different destination.";
   }
 }
 
@@ -65,19 +61,11 @@ export function describePersistError(error: PersistError): string {
  */
 export function describeConflictError(error: {
   documentChanged: Path[];
-  trashChanged: string[];
 }): string {
-  const parts: string[] = [];
-  if (error.documentChanged.length > 0) {
-    parts.push(
-      error.documentChanged.map((path) => encodePointer(path)).join(", "),
-    );
-  }
-  if (error.trashChanged.length > 0) {
-    const count = error.trashChanged.length;
-    parts.push(`${count} trash ${count === 1 ? "item" : "items"}`);
-  }
-  const changed = parts.length > 0 ? parts.join(" and ") : "this data";
+  const changed =
+    error.documentChanged.length > 0
+      ? error.documentChanged.map((path) => encodePointer(path)).join(", ")
+      : "this data";
   return `Someone else changed ${changed} since you loaded it. The view has been refreshed — review and try again.`;
 }
 

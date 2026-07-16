@@ -35,23 +35,14 @@ describe("describeConflictError", () => {
   it("names the changed document paths without note values", () => {
     const message = describeConflictError({
       documentChanged: [["tips", "bash"]],
-      trashChanged: [],
     });
     expect(message).toContain("/tips/bash");
   });
 
-  it("names a trash change by count, not content", () => {
-    const message = describeConflictError({
-      documentChanged: [],
-      trashChanged: ["t1", "t2"],
-    });
-    expect(message).toContain("2 trash items");
-  });
-
   it("falls back to a generic phrase when nothing specific is known", () => {
-    expect(
-      describeConflictError({ documentChanged: [], trashChanged: [] }),
-    ).toContain("this data");
+    expect(describeConflictError({ documentChanged: [] })).toContain(
+      "this data",
+    );
   });
 });
 
@@ -75,7 +66,7 @@ describe("describeError", () => {
   });
 
   it("dispatches a conflict-sourced error to describeConflictError", () => {
-    const error = { documentChanged: [["a"]], trashChanged: [] };
+    const error = { documentChanged: [["a"]] };
     expect(describeError({ source: "conflict", ...error })).toBe(
       describeConflictError(error),
     );

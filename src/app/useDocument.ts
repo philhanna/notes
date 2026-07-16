@@ -4,6 +4,7 @@ import {
   copy as copyInTree,
   createArrayElement,
   createObjectEntry,
+  deleteEntry as deleteEntryInTree,
   getAtPath,
   listChildren,
   move as moveInTree,
@@ -15,16 +16,6 @@ import type { Result } from "../domain/result.ts";
 import { err, ok } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { isJsonArray, isJsonObject } from "../domain/types.ts";
-import type { TrashDocument, TrashRecord } from "../domain/trash.ts";
-import {
-  changedTrashIds,
-  deleteToTrash,
-  EMPTY_TRASH,
-  emptyTrash as emptyTrashDomain,
-  permanentlyDelete,
-  recoverFromTrash,
-} from "../domain/trash.ts";
-import { decodePointerSegments } from "../domain/path.ts";
 import { anyPathOverlaps, changedPaths } from "../domain/diff.ts";
 import { affectedPaths } from "./concurrency.ts";
 import { findRelevantRevisions } from "./history.ts";
@@ -39,26 +30,23 @@ import type { PersistError } from "../persistence/types.ts";
  * flat union. `"conflict"` is distinct from a plain `"persist"` failure:
  * it means a concurrent write was detected, reconciliation was attempted,
  * and the affected paths genuinely overlapped (Phase 4, design.md 7.4) —
- * `document`/`trash` local state has already been refreshed to the latest
- * saved revision by the time this is returned, so a plain retry of the
- * same mutator call now operates against current data.
+ * local state has already been refreshed to the latest saved revision by
+ * the time this is returned, so a plain retry of the same mutator call now
+ * operates against current data.
  */
 export type MutationError =
   | { source: "domain"; error: TreeError }
   | { source: "persist"; error: PersistError }
-  | { source: "conflict"; documentChanged: Path[]; trashChanged: string[] };
+  | { source: "conflict"; documentChanged: Path[] };
 
 export interface DocumentPersistence {
   repository: Repository;
   /** The `sha` `initialDocument` was loaded at. */
   initialSha: string;
-  /** The trash `initialDocument` was loaded alongside. Defaults to empty for a brand-new document. */
-  initialTrash?: TrashDocument;
 }
 
 export interface DocumentState {
   document: JsonObject;
-  trash: TrashDocument;
   currentPath: Path;
   children: ChildEntry[];
   navigate: (path: Path) => void;
@@ -93,14 +81,6 @@ export interface DocumentState {
     newKey?: string,
   ) => Promise<Result<JsonObject, MutationError>>;
   deleteEntry: (path: Path) => Promise<Result<JsonObject, MutationError>>;
-  recover: (
-    trashId: string,
-    destination?: { parentPath: Path; key?: string },
-  ) => Promise<Result<JsonObject, MutationError>>;
-  permanentlyDeleteTrash: (
-    trashId: string,
-  ) => Promise<Result<TrashDocument, MutationError>>;
-  emptyTrash: () => Promise<Result<TrashDocument, MutationError>>;
   /**
    * The revisions relevant to `path` (design.md 10, 11), or `undefined`
    * when there is no `Repository` to query — GitHub commit history has no
@@ -135,12 +115,8 @@ function describeInsertedPath(
   return toParentPath;
 }
 
-type DocAndTrash = { document: JsonObject; trash: TrashDocument };
-/** Recomputes an operation's result against a given document/trash pair, so it can be reapplied against a freshly reloaded base (Phase 4). */
-type Recompute = (
-  document: JsonObject,
-  trash: TrashDocument,
-) => Result<DocAndTrash, TreeError>;
+/** Recomputes an operation's result against a given document, so it can be reapplied against a freshly reloaded base (Phase 4). */
+type Recompute = (document: JsonObject) => Result<JsonObject, TreeError>;
 
 /**
  * Holds a document and the currently browsed path in local component state
@@ -151,12 +127,12 @@ type Recompute = (
  * input untouched (design.md 9, 13). Without `persistence`, mutators still
  * return a Promise, resolved in the same microtask against local state only.
  *
- * On a stale-`sha` conflict (design.md 7.4, Phase 4), `commitCore` reloads
- * the latest revision, compares the operation's affected paths against what
- * actually changed since `sha`, and either reapplies the operation once
- * against the fresh base (disjoint changes) or reports a `"conflict"`
- * `MutationError` with local state already refreshed (overlapping changes) —
- * see `commitCore` below.
+ * On a stale-`sha` conflict (design.md 7.4, Phase 4), `asDocumentResult`
+ * reloads the latest revision, compares the operation's affected paths
+ * against what actually changed since `sha`, and either reapplies the
+ * operation once against the fresh base (disjoint changes) or reports a
+ * `"conflict"` `MutationError` with local state already refreshed
+ * (overlapping changes) — see `asDocumentResult` below.
  */
 export function useDocument(
   initialDocument: JsonObject,
@@ -166,9 +142,6 @@ export function useDocument(
   const [currentPath, setCurrentPath] = useState<Path>([]);
   const [sha, setSha] = useState<string | null>(
     persistence?.initialSha ?? null,
-  );
-  const [trash, setTrash] = useState<TrashDocument>(
-    persistence?.initialTrash ?? EMPTY_TRASH,
   );
 
   const children = useMemo(() => {
@@ -180,20 +153,19 @@ export function useDocument(
 
   /**
    * The single save path every mutator goes through. `recompute` must be
-   * safe to call again against a different (document, trash) pair — it is
-   * called once against current local state, and, on a disjoint conflict,
-   * once more against the freshly reloaded state.
+   * safe to call again against a different document — it is called once
+   * against current local state, and, on a disjoint conflict, once more
+   * against the freshly reloaded state.
    */
-  const commitCore = useCallback(
+  const asDocumentResult = useCallback(
     async (
       recompute: Recompute,
       operation: Operation,
-    ): Promise<Result<DocAndTrash, MutationError>> => {
-      const first = recompute(document, trash);
+    ): Promise<Result<JsonObject, MutationError>> => {
+      const first = recompute(document);
       if (!first.ok) return err({ source: "domain", error: first.error });
       if (!persistence) {
-        setDocument(first.value.document);
-        setTrash(first.value.trash);
+        setDocument(first.value);
         return ok(first.value);
       }
       if (sha === null) {
@@ -201,13 +173,12 @@ export function useDocument(
       }
 
       const saved = await persistence.repository.save(
-        first.value,
+        { document: first.value },
         sha,
         operation,
       );
       if (saved.ok) {
-        setDocument(first.value.document);
-        setTrash(first.value.trash);
+        setDocument(first.value);
         setSha(saved.value.sha);
         return ok(first.value);
       }
@@ -221,77 +192,43 @@ export function useDocument(
         return err({ source: "persist", error: reloaded.error });
 
       const documentChanged = changedPaths(document, reloaded.value.document);
-      const trashChanged = changedTrashIds(trash, reloaded.value.trash);
       const affected = affectedPaths(operation);
-      const overlaps =
-        anyPathOverlaps(affected.document, documentChanged) ||
-        (affected.trash === "all"
-          ? trashChanged.length > 0
-          : affected.trash.some((id) => trashChanged.includes(id)));
+      const overlaps = anyPathOverlaps(affected, documentChanged);
 
       if (overlaps) {
         setDocument(reloaded.value.document);
-        setTrash(reloaded.value.trash);
         setSha(reloaded.value.sha);
-        return err({ source: "conflict", documentChanged, trashChanged });
+        return err({ source: "conflict", documentChanged });
       }
 
       // Disjoint — reapply once against the fresh base (design.md 7.4's "retry once").
-      const retry = recompute(reloaded.value.document, reloaded.value.trash);
+      const retry = recompute(reloaded.value.document);
       if (!retry.ok) {
         setDocument(reloaded.value.document);
-        setTrash(reloaded.value.trash);
         setSha(reloaded.value.sha);
         return err({ source: "domain", error: retry.error });
       }
       const retrySaved = await persistence.repository.save(
-        retry.value,
+        { document: retry.value },
         reloaded.value.sha,
         operation,
       );
       if (!retrySaved.ok) {
         setDocument(reloaded.value.document);
-        setTrash(reloaded.value.trash);
         setSha(reloaded.value.sha);
         return err({ source: "persist", error: retrySaved.error });
       }
-      setDocument(retry.value.document);
-      setTrash(retry.value.trash);
+      setDocument(retry.value);
       setSha(retrySaved.value.sha);
       return ok(retry.value);
     },
-    [persistence, sha, document, trash],
-  );
-
-  const asDocumentResult = useCallback(
-    async (
-      recompute: Recompute,
-      operation: Operation,
-    ): Promise<Result<JsonObject, MutationError>> => {
-      const result = await commitCore(recompute, operation);
-      return result.ok ? ok(result.value.document) : result;
-    },
-    [commitCore],
-  );
-
-  const asTrashResult = useCallback(
-    async (
-      recompute: Recompute,
-      operation: Operation,
-    ): Promise<Result<TrashDocument, MutationError>> => {
-      const result = await commitCore(recompute, operation);
-      return result.ok ? ok(result.value.trash) : result;
-    },
-    [commitCore],
+    [persistence, sha, document],
   );
 
   const createEntry = useCallback(
     (key: string, value: JsonValue) =>
       asDocumentResult(
-        (doc, tr) => {
-          const result = createObjectEntry(doc, currentPath, key, value);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
+        (doc) => createObjectEntry(doc, currentPath, key, value),
         { kind: "create-entry", path: [...currentPath, key] },
       ),
     [asDocumentResult, currentPath],
@@ -299,39 +236,27 @@ export function useDocument(
 
   const createElement = useCallback(
     (value: JsonValue) =>
-      asDocumentResult(
-        (doc, tr) => {
-          const result = createArrayElement(doc, currentPath, value);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
-        { kind: "create-element", path: [...currentPath, children.length] },
-      ),
+      asDocumentResult((doc) => createArrayElement(doc, currentPath, value), {
+        kind: "create-element",
+        path: [...currentPath, children.length],
+      }),
     [asDocumentResult, currentPath, children.length],
   );
 
   const rename = useCallback(
     (oldKey: string, newKey: string) =>
-      asDocumentResult(
-        (doc, tr) => {
-          const result = renameKey(doc, currentPath, oldKey, newKey);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
-        {
-          kind: "rename",
-          path: [...currentPath, oldKey],
-          newPath: [...currentPath, newKey],
-        },
-      ),
+      asDocumentResult((doc) => renameKey(doc, currentPath, oldKey, newKey), {
+        kind: "rename",
+        path: [...currentPath, oldKey],
+        newPath: [...currentPath, newKey],
+      }),
     [asDocumentResult, currentPath],
   );
 
   const setValue = useCallback(
     (path: Path, value: JsonValue, confirmReplace = false) =>
       asDocumentResult(
-        (doc, tr) => {
-          const result = setValueAtPath(doc, path, value, confirmReplace);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
+        (doc) => setValueAtPath(doc, path, value, confirmReplace),
         { kind: "set-value", path },
       ),
     [asDocumentResult],
@@ -340,15 +265,7 @@ export function useDocument(
   const reorder = useCallback(
     (fromIndex: number, toIndex: number) =>
       asDocumentResult(
-        (doc, tr) => {
-          const result = reorderArrayElement(
-            doc,
-            currentPath,
-            fromIndex,
-            toIndex,
-          );
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
+        (doc) => reorderArrayElement(doc, currentPath, fromIndex, toIndex),
         { kind: "reorder", path: currentPath },
       ),
     [asDocumentResult, currentPath],
@@ -357,10 +274,7 @@ export function useDocument(
   const move = useCallback(
     (fromPath: Path, toParentPath: Path, newKey?: string) =>
       asDocumentResult(
-        (doc, tr) => {
-          const result = moveInTree(doc, fromPath, toParentPath, newKey);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
+        (doc) => moveInTree(doc, fromPath, toParentPath, newKey),
         {
           kind: "move",
           path: fromPath,
@@ -378,10 +292,7 @@ export function useDocument(
   const copy = useCallback(
     (fromPath: Path, toParentPath: Path, newKey?: string) =>
       asDocumentResult(
-        (doc, tr) => {
-          const result = copyInTree(doc, fromPath, toParentPath, newKey);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
+        (doc) => copyInTree(doc, fromPath, toParentPath, newKey),
         {
           kind: "copy",
           path: fromPath,
@@ -397,59 +308,12 @@ export function useDocument(
   );
 
   const deleteEntry = useCallback(
-    (path: Path) => {
-      const record = {
-        id: crypto.randomUUID(),
-        deletedAt: new Date().toISOString(),
-      };
-      return asDocumentResult(
-        (doc, tr) => deleteToTrash(doc, tr, path, record),
-        { kind: "delete", path },
-      );
-    },
+    (path: Path) =>
+      asDocumentResult((doc) => deleteEntryInTree(doc, path), {
+        kind: "delete",
+        path,
+      }),
     [asDocumentResult],
-  );
-
-  const recover = useCallback(
-    (trashId: string, destination?: { parentPath: Path; key?: string }) => {
-      const record: TrashRecord | undefined = trash.records.find(
-        (candidate) => candidate.id === trashId,
-      );
-      const path = record ? decodePointerSegments(record.originalPath) : [];
-      return asDocumentResult(
-        (doc, tr) => recoverFromTrash(doc, tr, trashId, destination),
-        { kind: "recover", path, trashId },
-      );
-    },
-    [asDocumentResult, trash],
-  );
-
-  const permanentlyDeleteTrash = useCallback(
-    (trashId: string) => {
-      const record = trash.records.find(
-        (candidate) => candidate.id === trashId,
-      );
-      const path = record ? decodePointerSegments(record.originalPath) : [];
-      return asTrashResult(
-        (doc, tr) => {
-          const result = permanentlyDelete(tr, trashId);
-          return result.ok
-            ? ok({ document: doc, trash: result.value })
-            : result;
-        },
-        { kind: "permanent-delete", path, trashId },
-      );
-    },
-    [asTrashResult, trash],
-  );
-
-  const emptyTrashMutator = useCallback(
-    () =>
-      asTrashResult(
-        (doc, tr) => ok({ document: doc, trash: emptyTrashDomain(tr) }),
-        { kind: "empty-trash" },
-      ),
-    [asTrashResult],
   );
 
   const history = persistence
@@ -458,22 +322,19 @@ export function useDocument(
 
   const restore = useCallback(
     (path: Path, value: JsonValue, revisionSha: string) =>
-      asDocumentResult(
-        (doc, tr) => {
-          // confirmReplace: true — the user already chose this value from a
-          // history preview, so the usual type-change confirmation would be
-          // redundant (design.md 10 describes no separate restore confirmation).
-          const result = setValueAtPath(doc, path, value, true);
-          return result.ok ? ok({ document: result.value, trash: tr }) : result;
-        },
-        { kind: "restore", path, revisionSha },
-      ),
+      // confirmReplace: true — the user already chose this value from a
+      // history preview, so the usual type-change confirmation would be
+      // redundant (design.md 10 describes no separate restore confirmation).
+      asDocumentResult((doc) => setValueAtPath(doc, path, value, true), {
+        kind: "restore",
+        path,
+        revisionSha,
+      }),
     [asDocumentResult],
   );
 
   return {
     document,
-    trash,
     currentPath,
     children,
     navigate,
@@ -484,9 +345,6 @@ export function useDocument(
     move,
     copy,
     deleteEntry,
-    recover,
-    permanentlyDeleteTrash,
-    emptyTrash: emptyTrashMutator,
     reorder,
     history,
     restore,

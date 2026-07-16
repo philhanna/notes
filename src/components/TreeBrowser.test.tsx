@@ -107,7 +107,7 @@ describe("TreeBrowser", () => {
     expect(values()).toEqual(["2", "1", "3"]);
   });
 
-  it("deletes an entry after confirmation, moving it to trash", async () => {
+  it("deletes an entry after confirmation, permanently", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -117,7 +117,7 @@ describe("TreeBrowser", () => {
       within(hardinfoRow).getByRole("button", { name: "Delete" }),
     );
     const dialog = screen.getByRole("alertdialog");
-    expect(dialog).toHaveTextContent(/moved to trash/);
+    expect(dialog).toHaveTextContent(/cannot be undone/);
 
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 

@@ -371,7 +371,7 @@ export function ChildRow({
 
       {confirmingDelete && (
         <ConfirmDialog
-          message={`Delete "${label}"? It will be moved to trash.`}
+          message={`Delete "${label}"? This cannot be undone.`}
           confirmLabel="Delete"
           onConfirm={() => void handleDeleteConfirm()}
           onCancel={() => setConfirmingDelete(false)}

@@ -170,7 +170,6 @@ a {
 code,
 .child-row__main,
 .search-results__label,
-.trash-row__main,
 .sign-in__code {
   color: var(--ink);
   font-family: var(--mono);
@@ -264,8 +263,7 @@ code,
 
 .tree-browser__header,
 .search-view__header,
-.history-panel__header,
-.trash-view__header {
+.history-panel__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -276,13 +274,11 @@ code,
 
 .tree-browser__heading,
 .search-view__header h2,
-.history-panel__header h2,
-.trash-view__header h2 {
+.history-panel__header h2 {
   margin: 0;
 }
 
 .child-list,
-.trash-list,
 .search-results,
 .history-list {
   display: flex;
@@ -294,7 +290,6 @@ code,
 }
 
 .child-row,
-.trash-row,
 .history-preview,
 .setup,
 .sign-in,
@@ -321,13 +316,6 @@ code,
   gap: 0.75rem 1.25rem;
 }
 
-.trash-row__main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem 1.25rem;
-}
-
 .child-row__label,
 .search-results__label {
   font-weight: 700;
@@ -350,7 +338,6 @@ code,
   text-align: left;
 }
 
-.trash-row__actions,
 .value-editor__actions,
 .confirm-dialog__actions {
   display: flex;
@@ -434,7 +421,6 @@ code,
 .value-editor,
 .child-row__rename,
 .child-row__relocate,
-.trash-row__destination,
 .create-entry-form,
 .setup {
   display: flex;
@@ -476,8 +462,6 @@ code,
 }
 
 .child-row__error,
-.trash-row__error,
-.trash-view__error,
 .history-panel__error,
 .search-view__error {
   margin: 0.5rem 0 0;

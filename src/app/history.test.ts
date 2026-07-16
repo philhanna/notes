@@ -17,20 +17,14 @@ describe("findRelevantRevisions", () => {
 
     // Changes an unrelated key — should not show up in /tips/bash history.
     const unrelated = await repository.save(
-      {
-        document: { tips: { bash: "old" }, other: 2 },
-        trash: loaded.value.trash,
-      },
+      { document: { tips: { bash: "old" }, other: 2 } },
       loaded.value.sha,
       { kind: "set-value", path: ["other"] },
     );
     if (!unrelated.ok) throw new Error("expected save to succeed");
 
     const relevant1 = await repository.save(
-      {
-        document: { tips: { bash: "new" }, other: 2 },
-        trash: loaded.value.trash,
-      },
+      { document: { tips: { bash: "new" }, other: 2 } },
       unrelated.value.sha,
       { kind: "set-value", path: ["tips", "bash"] },
     );
@@ -53,14 +47,14 @@ describe("findRelevantRevisions", () => {
     if (!loaded.ok) throw new Error("expected loadDocument to succeed");
 
     const second = await repository.save(
-      { document: { note: "v2" }, trash: loaded.value.trash },
+      { document: { note: "v2" } },
       loaded.value.sha,
       { kind: "set-value", path: ["note"] },
     );
     if (!second.ok) throw new Error("expected save to succeed");
 
     const third = await repository.save(
-      { document: { note: "v3" }, trash: loaded.value.trash },
+      { document: { note: "v3" } },
       second.value.sha,
       { kind: "set-value", path: ["note"] },
     );

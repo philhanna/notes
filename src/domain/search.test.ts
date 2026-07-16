@@ -59,11 +59,4 @@ describe("buildSearchIndex/search", () => {
     const results = search(buildSearchIndex(document), "empty");
     expect(results.map((r) => r.path)).toEqual([["empty"]]);
   });
-
-  it("does not match trash or history data, since only the active document is indexed", () => {
-    // buildSearchIndex only ever receives a JsonObject (the active document);
-    // there is no way to pass trash or history data into it at all.
-    const index = buildSearchIndex(document);
-    expect(index.every((entry) => entry.path[0] !== ".trash")).toBe(true);
-  });
 });

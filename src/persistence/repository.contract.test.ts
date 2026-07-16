@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Repository } from "./repository.ts";
 import { createInMemoryRepository } from "./inMemoryRepository.ts";
 import { createGithubRepository } from "./githubRepository.ts";
-import { EMPTY_TRASH, serializeTrash } from "../domain/trash.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import { serializeDocument } from "../domain/serialize.ts";
 import type { JsonObject } from "../domain/types.ts";
 
@@ -24,7 +22,6 @@ function encodeBase64(text: string): string {
 }
 
 const DOCUMENT_PATH = "remember.json";
-const TRASH_PATH = ".trash/trash.json";
 const BRANCH = "main";
 
 interface TreeNode {
@@ -50,10 +47,7 @@ interface CommitNode {
  * the real API: PATCHing the ref only succeeds when the new commit's parent
  * matches the current head (a fast-forward), matching `force: false`.
  */
-function stubGithubTransport(
-  initialDocument: Record<string, unknown>,
-  initialTrash?: TrashDocument,
-) {
+function stubGithubTransport(initialDocument: Record<string, unknown>) {
   const blobs = new Map<string, string>();
   const trees = new Map<string, TreeNode[]>();
   const commits = new Map<string, CommitNode>();
@@ -109,10 +103,10 @@ function stubGithubTransport(
   }
 
   // Seed the initial commit (and tree/blobs) matching what loadDocument expects to find.
-  // Uses serializeDocument/serializeTrash, not plain JSON.stringify, so a
-  // save that leaves content logically unchanged reuses this same blob sha
-  // (real Git blobs are content-addressed) instead of always minting a new
-  // one from a differently-formatted byte string.
+  // Uses serializeDocument, not plain JSON.stringify, so a save that leaves
+  // content logically unchanged reuses this same blob sha (real Git blobs
+  // are content-addressed) instead of always minting a new one from a
+  // differently-formatted byte string.
   const initialEntries: TreeNode[] = [
     {
       path: DOCUMENT_PATH,
@@ -121,12 +115,6 @@ function stubGithubTransport(
       ),
     },
   ];
-  if (initialTrash) {
-    initialEntries.push({
-      path: TRASH_PATH,
-      sha: putBlob(encodeBase64(serializeTrash(initialTrash))),
-    });
-  }
   const initialTreeSha = putTree(undefined, initialEntries);
   head = putCommit(initialTreeSha, []);
 
@@ -261,20 +249,13 @@ function runContractTests(name: string, createRepository: () => Repository) {
       }
     });
 
-    it("defaults to empty trash when no trash file exists", async () => {
-      const repository = createRepository();
-      const result = await repository.loadDocument();
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value.trash).toEqual(EMPTY_TRASH);
-    });
-
     it("saves a change conditional on the loaded sha, and the change is visible on reload", async () => {
       const repository = createRepository();
       const loaded = await repository.loadDocument();
       if (!loaded.ok) throw new Error("expected loadDocument to succeed");
 
       const saved = await repository.save(
-        { document: { hardinfo: "updated" }, trash: EMPTY_TRASH },
+        { document: { hardinfo: "updated" } },
         loaded.value.sha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -287,43 +268,13 @@ function runContractTests(name: string, createRepository: () => Repository) {
       }
     });
 
-    it("saves a trash-only change, advancing sha and visible on reload", async () => {
-      const repository = createRepository();
-      const loaded = await repository.loadDocument();
-      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
-
-      const trash: TrashDocument = {
-        version: 1,
-        records: [
-          {
-            id: "trash-1",
-            deletedAt: "2026-07-14T00:00:00.000Z",
-            originalPath: "/gone",
-            type: "string",
-            value: "gone",
-          },
-        ],
-      };
-      const saved = await repository.save(
-        { document: loaded.value.document, trash },
-        loaded.value.sha,
-        { kind: "delete", path: ["gone"] },
-      );
-      expect(saved.ok).toBe(true);
-      if (saved.ok) expect(saved.value.sha).not.toBe(loaded.value.sha);
-
-      const reloaded = await repository.loadDocument();
-      expect(reloaded.ok).toBe(true);
-      if (reloaded.ok) expect(reloaded.value.trash).toEqual(trash);
-    });
-
     it("rejects a save against a stale sha with a conflict", async () => {
       const repository = createRepository();
       const loaded = await repository.loadDocument();
       if (!loaded.ok) throw new Error("expected loadDocument to succeed");
 
       const first = await repository.save(
-        { document: { hardinfo: "first writer" }, trash: EMPTY_TRASH },
+        { document: { hardinfo: "first writer" } },
         loaded.value.sha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -331,41 +282,9 @@ function runContractTests(name: string, createRepository: () => Repository) {
 
       // A second writer, still holding the base sha the first writer just advanced past.
       const stale = await repository.save(
-        { document: { hardinfo: "second writer" }, trash: EMPTY_TRASH },
+        { document: { hardinfo: "second writer" } },
         loaded.value.sha,
         { kind: "set-value", path: ["hardinfo"] },
-      );
-      expect(stale).toEqual({ ok: false, error: { kind: "conflict" } });
-    });
-
-    it("rejects a stale save even when only trash changed", async () => {
-      const repository = createRepository();
-      const loaded = await repository.loadDocument();
-      if (!loaded.ok) throw new Error("expected loadDocument to succeed");
-
-      const first = await repository.save(
-        { document: loaded.value.document, trash: EMPTY_TRASH },
-        loaded.value.sha,
-        { kind: "set-value", path: ["hardinfo"] },
-      );
-      expect(first.ok).toBe(true);
-
-      const trash: TrashDocument = {
-        version: 1,
-        records: [
-          {
-            id: "trash-1",
-            deletedAt: "2026-07-14T00:00:00.000Z",
-            originalPath: "/gone",
-            type: "string",
-            value: "gone",
-          },
-        ],
-      };
-      const stale = await repository.save(
-        { document: loaded.value.document, trash },
-        loaded.value.sha,
-        { kind: "delete", path: ["gone"] },
       );
       expect(stale).toEqual({ ok: false, error: { kind: "conflict" } });
     });
@@ -375,34 +294,18 @@ function runContractTests(name: string, createRepository: () => Repository) {
       const loaded = await repository.loadDocument();
       if (!loaded.ok) throw new Error("expected loadDocument to succeed");
 
-      // A trash-only change does not touch remember.json's content, so it
-      // should not appear in remember.json's history (design.md 9's "list
-      // commits affecting the data ... files" — path-filtered, like `git
-      // log -- path`).
-      const trashOnly = await repository.save(
-        {
-          document: loaded.value.document,
-          trash: {
-            version: 1,
-            records: [
-              {
-                id: "trash-1",
-                deletedAt: "2026-07-14T00:00:00.000Z",
-                originalPath: "/gone",
-                type: "string",
-                value: "gone",
-              },
-            ],
-          },
-        },
+      // Content-addressed blobs mean re-saving the same document reuses the
+      // same remember.json blob sha, so this commit changed nothing.
+      const unchanged = await repository.save(
+        { document: loaded.value.document },
         loaded.value.sha,
-        { kind: "delete", path: ["gone"] },
+        { kind: "set-value", path: ["hardinfo"] },
       );
-      if (!trashOnly.ok) throw new Error("expected trash-only save to succeed");
+      if (!unchanged.ok) throw new Error("expected unchanged save to succeed");
 
       const documentChange = await repository.save(
-        { document: { hardinfo: "updated" }, trash: EMPTY_TRASH },
-        trashOnly.value.sha,
+        { document: { hardinfo: "updated" } },
+        unchanged.value.sha,
         { kind: "set-value", path: ["hardinfo"] },
       );
       if (!documentChange.ok)
@@ -413,7 +316,7 @@ function runContractTests(name: string, createRepository: () => Repository) {
       if (history.ok) {
         const shas = history.value.map((entry) => entry.sha);
         expect(shas[0]).toBe(documentChange.value.sha);
-        expect(shas).not.toContain(trashOnly.value.sha);
+        expect(shas).not.toContain(unchanged.value.sha);
       }
     });
 
@@ -423,7 +326,7 @@ function runContractTests(name: string, createRepository: () => Repository) {
       if (!loaded.ok) throw new Error("expected loadDocument to succeed");
 
       const saved = await repository.save(
-        { document: { hardinfo: "updated" }, trash: EMPTY_TRASH },
+        { document: { hardinfo: "updated" } },
         loaded.value.sha,
         { kind: "set-value", path: ["hardinfo"] },
       );

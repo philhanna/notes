@@ -3,8 +3,8 @@ import {
   copy,
   createArrayElement,
   createObjectEntry,
+  deleteEntry,
   getAtPath,
-  insertArrayElementAt,
   listChildren,
   move,
   removeEntry,
@@ -474,39 +474,39 @@ describe("copy", () => {
   });
 });
 
-describe("insertArrayElementAt", () => {
-  it("inserts at a given position, shifting later elements up", () => {
+describe("deleteEntry", () => {
+  it("permanently removes a scalar entry", () => {
     const doc = sample();
-    const result = insertArrayElementAt(doc, ["with-rating"], 1, "middle");
+    const result = deleteEntry(doc, ["hardinfo"]);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(getAtPath(result.value, ["with-rating"])).toEqual([
-        "#! /bin/bash",
-        "middle",
-        "pytest -v",
-      ]);
+      expect(getAtPath(result.value, ["hardinfo"])).toBeUndefined();
     }
     expect(doc).toEqual(sample());
   });
 
-  it("clamps an out-of-range index to the array's end", () => {
+  it("permanently removes a container and its descendants", () => {
     const doc = sample();
-    const result = insertArrayElementAt(doc, ["with-rating"], 99, "end");
+    const result = deleteEntry(doc, ["tips"]);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(getAtPath(result.value, ["with-rating"])).toEqual([
-        "#! /bin/bash",
-        "pytest -v",
-        "end",
-      ]);
+      expect(getAtPath(result.value, ["tips"])).toBeUndefined();
     }
   });
 
-  it("fails when the destination is not an array, without mutating", () => {
+  it("rejects deleting the document root, without mutating", () => {
     const doc = sample();
-    const result = insertArrayElementAt(doc, ["tips"], 0, "value");
+    const result = deleteEntry(doc, []);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.kind).toBe("not-array");
+    if (!result.ok) expect(result.error.kind).toBe("cannot-delete-root");
+    expect(doc).toEqual(sample());
+  });
+
+  it("fails on a nonexistent path, without mutating", () => {
+    const doc = sample();
+    const result = deleteEntry(doc, ["nope"]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("not-found");
     expect(doc).toEqual(sample());
   });
 });

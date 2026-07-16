@@ -7,9 +7,9 @@ interface ExportButtonProps {
 
 /**
  * Downloads the active tree as JSON (design.md 10, 12): only ever given
- * `document`, so trash, history metadata, credentials, and repository
- * settings have no way to end up in the file. Export happens only when the
- * user clicks this — nothing here runs on a schedule.
+ * `document`, so history metadata, credentials, and repository settings
+ * have no way to end up in the file. Export happens only when the user
+ * clicks this — nothing here runs on a schedule.
  */
 export function ExportButton({ document: activeDocument }: ExportButtonProps) {
   function handleExport() {

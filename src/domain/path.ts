@@ -38,10 +38,7 @@ const ARRAY_INDEX = /^(0|[1-9]\d*)$/;
  * Walks `doc` following raw (unescaped) JSON Pointer segments, producing the
  * typed Path (array indices as numbers, object keys as strings) found along
  * the way, or `undefined` if the segments do not resolve to an existing
- * location in `doc`. Shared by resolvePointer (whole-pointer resolution) and
- * callers that only have a pointer's parent segments, since the leaf they
- * care about may not exist in `doc` yet (for example, resolving a trash
- * record's original parent when recovering it).
+ * location in `doc`. Used by resolvePointer (whole-pointer resolution).
  */
 export function resolvePointerSegments(
   doc: JsonValue,

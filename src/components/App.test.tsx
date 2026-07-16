@@ -63,7 +63,7 @@ describe("App", () => {
     expect(await screen.findByText("hardinfo")).toBeInTheDocument();
   });
 
-  it("deletes an entry to trash and recovers it, end to end against the repository", async () => {
+  it("permanently deletes an entry, end to end against the repository", async () => {
     const user = userEvent.setup();
     seedSignedIn();
     seedRepoConfig();
@@ -83,14 +83,6 @@ describe("App", () => {
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
 
     expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /^Trash/ }));
-    expect(screen.getByText("/hardinfo")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Recover" }));
-    await user.click(screen.getByRole("button", { name: "Back to notes" }));
-
-    expect(await screen.findByText("hardinfo")).toBeInTheDocument();
   });
 
   it("shows an error and a sign-out control when the document fails to load", async () => {

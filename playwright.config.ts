@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Two independent servers, matching two different things this suite tests:
- * - "harness" (vite dev, fast) drives the real tree/trash/search UI wired to
+ * - "harness" (vite dev, fast) drives the real tree/search UI wired to
  *   an in-memory repository (src/harness.tsx) — keyboard operation, focus
  *   management, and an axe accessibility scan, without live GitHub.
  * - "pwa" (vite preview over the actual `dist/` build) exercises the

@@ -12,7 +12,7 @@ import type { PersistError } from "./types.ts";
  * ref update (fast-forward failure) already comes back as `conflict`,
  * distinguishable from `unauthorized`, without any new mapping code here.
  * `githubRepository.ts` is the only caller — this module knows nothing
- * about `remember.json`/`.trash/trash.json` specifically.
+ * about `remember.json` specifically.
  */
 
 export interface TreeEntry {

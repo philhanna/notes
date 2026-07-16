@@ -5,7 +5,6 @@ import { useAuth } from "../auth/useAuth.ts";
 import { useDocument } from "../app/useDocument.ts";
 import { useOnlineStatus } from "../app/useOnlineStatus.ts";
 import type { JsonObject } from "../domain/types.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import {
   activateWaitingServiceWorker,
   registerServiceWorker,
@@ -18,7 +17,6 @@ import { SearchView } from "./SearchView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
 import { TreeBrowser } from "./TreeBrowser.tsx";
-import { TrashView } from "./TrashView.tsx";
 
 type LoadState =
   | { phase: "idle" }
@@ -29,7 +27,6 @@ type LoadState =
       config: RepoConfig;
       repository: Repository;
       document: JsonObject;
-      trash: TrashDocument;
       sha: string;
     }
   | { phase: "error"; message: string };
@@ -80,7 +77,6 @@ export function App() {
         config,
         repository,
         document: result.value.document,
-        trash: result.value.trash,
         sha: result.value.sha,
       });
     });
@@ -102,7 +98,6 @@ export function App() {
             config,
             repository: createGithubRepository(config, auth.getAccessToken),
             document: loaded.document,
-            trash: loaded.trash,
             sha: loaded.sha,
           });
         }}
@@ -175,21 +170,10 @@ function ReadyApp({
   const documentState = useDocument(state.document, {
     repository: state.repository,
     initialSha: state.sha,
-    initialTrash: state.trash,
   });
-  const [view, setView] = useState<"tree" | "trash" | "search">("tree");
+  const [view, setView] = useState<"tree" | "search">("tree");
   return (
     <>
-      {view === "trash" && (
-        <TrashView
-          document={documentState.document}
-          trash={documentState.trash}
-          recover={documentState.recover}
-          permanentlyDeleteTrash={documentState.permanentlyDeleteTrash}
-          emptyTrash={documentState.emptyTrash}
-          onClose={() => setView("tree")}
-        />
-      )}
       {view === "search" && (
         <SearchView
           document={documentState.document}
@@ -205,11 +189,6 @@ function ReadyApp({
         {view !== "search" && (
           <button type="button" onClick={() => setView("search")}>
             Search
-          </button>
-        )}
-        {view !== "trash" && (
-          <button type="button" onClick={() => setView("trash")}>
-            Trash ({documentState.trash.records.length})
           </button>
         )}
         <ExportButton document={documentState.document} />

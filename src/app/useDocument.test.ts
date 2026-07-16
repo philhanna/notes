@@ -129,8 +129,8 @@ describe("useDocument", () => {
     expect(child).toMatchObject({ value: "restored value" });
   });
 
-  describe("trash", () => {
-    it("deletes an entry into trash and removes it from the active tree", async () => {
+  describe("delete", () => {
+    it("permanently removes an entry from the active tree", async () => {
       const { result } = renderHook(() => useDocument(sample()));
       await act(async () => {
         const outcome = await result.current.deleteEntry(["hardinfo"]);
@@ -141,104 +141,20 @@ describe("useDocument", () => {
           (c) => c.kind === "object-entry" && c.key === "hardinfo",
         ),
       ).toBe(false);
-      expect(result.current.trash.records).toHaveLength(1);
-      expect(result.current.trash.records[0]).toMatchObject({
-        originalPath: "/hardinfo",
-        type: "string",
-        value: "system info",
-      });
     });
 
-    it("recovers a trash record to its original path", async () => {
+    it("rejects deleting the document root", async () => {
       const { result } = renderHook(() => useDocument(sample()));
       await act(async () => {
-        await result.current.deleteEntry(["hardinfo"]);
-      });
-      const trashId = result.current.trash.records[0]!.id;
-
-      await act(async () => {
-        const outcome = await result.current.recover(trashId);
-        expect(outcome.ok).toBe(true);
-      });
-      expect(
-        result.current.children.some(
-          (c) => c.kind === "object-entry" && c.key === "hardinfo",
-        ),
-      ).toBe(true);
-      expect(result.current.trash.records).toHaveLength(0);
-    });
-
-    it("requires an explicit destination when the original path is occupied", async () => {
-      const { result } = renderHook(() => useDocument(sample()));
-      await act(async () => {
-        await result.current.deleteEntry(["hardinfo"]);
-      });
-      const trashId = result.current.trash.records[0]!.id;
-      await act(async () => {
-        await result.current.createEntry("hardinfo", "replacement");
-      });
-
-      await act(async () => {
-        const outcome = await result.current.recover(trashId);
+        const outcome = await result.current.deleteEntry([]);
         expect(outcome.ok).toBe(false);
         if (!outcome.ok) {
           expect(outcome.error).toEqual({
             source: "domain",
-            error: { kind: "destination-required" },
+            error: { kind: "cannot-delete-root" },
           });
         }
       });
-
-      await act(async () => {
-        const outcome = await result.current.recover(trashId, {
-          parentPath: ["tips"],
-          key: "recovered",
-        });
-        expect(outcome.ok).toBe(true);
-      });
-      expect(result.current.trash.records).toHaveLength(0);
-      act(() => result.current.navigate(["tips"]));
-      expect(
-        result.current.children.some(
-          (c) => c.kind === "object-entry" && c.key === "recovered",
-        ),
-      ).toBe(true);
-    });
-
-    it("permanently deletes a trash record without restoring it", async () => {
-      const { result } = renderHook(() => useDocument(sample()));
-      await act(async () => {
-        await result.current.deleteEntry(["hardinfo"]);
-      });
-      const trashId = result.current.trash.records[0]!.id;
-
-      await act(async () => {
-        const outcome = await result.current.permanentlyDeleteTrash(trashId);
-        expect(outcome.ok).toBe(true);
-      });
-      expect(result.current.trash.records).toHaveLength(0);
-      expect(
-        result.current.children.some(
-          (c) => c.kind === "object-entry" && c.key === "hardinfo",
-        ),
-      ).toBe(false);
-    });
-
-    it("empties all trash records", async () => {
-      const { result } = renderHook(() => useDocument(sample()));
-      await act(async () => {
-        await result.current.deleteEntry(["hardinfo"]);
-      });
-      await act(async () => {
-        await result.current.deleteEntry(["list"]);
-      });
-      expect(result.current.trash.records).toHaveLength(2);
-
-      await act(async () => {
-        const outcome = await result.current.emptyTrash();
-        expect(outcome.ok).toBe(true);
-      });
-      expect(result.current.trash.records).toHaveLength(0);
     });
   });
 
@@ -303,10 +219,7 @@ describe("useDocument", () => {
 
       // Simulate a second device committing an unrelated change first.
       await repository.save(
-        {
-          document: { ...sample(), list: [9, 9, 9] },
-          trash: { version: 1, records: [] },
-        },
+        { document: { ...sample(), list: [9, 9, 9] } },
         baseSha,
         { kind: "set-value", path: ["list"] },
       );
@@ -333,10 +246,7 @@ describe("useDocument", () => {
 
       // Simulate a second device changing the very key this hook is about to edit.
       await repository.save(
-        {
-          document: { ...sample(), hardinfo: "changed elsewhere" },
-          trash: { version: 1, records: [] },
-        },
+        { document: { ...sample(), hardinfo: "changed elsewhere" } },
         baseSha,
         { kind: "set-value", path: ["hardinfo"] },
       );
@@ -381,7 +291,7 @@ describe("useDocument", () => {
       expect(repository.commits).toHaveLength(0);
     });
 
-    it("commits a delete's document and trash changes together, in one commit", async () => {
+    it("commits a permanent delete", async () => {
       const repository = createInMemoryRepository({
         initialDocument: sample(),
       });
@@ -397,8 +307,6 @@ describe("useDocument", () => {
       expect(repository.commits).toHaveLength(1);
       expect(repository.commits[0]?.message).toBe("Delete /hardinfo");
       expect(repository.commits[0]?.document).not.toHaveProperty("hardinfo");
-      expect(repository.commits[0]?.trash.records).toHaveLength(1);
-      expect(result.current.trash.records).toHaveLength(1);
     });
 
     it("exposes history, finding the revisions relevant to a path", async () => {

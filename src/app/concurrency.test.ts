@@ -5,35 +5,20 @@ describe("affectedPaths", () => {
   it("names the destination array, not the appended index, for create-element", () => {
     expect(
       affectedPaths({ kind: "create-element", path: ["list", 3] }),
-    ).toEqual({
-      document: [["list"]],
-      trash: [],
-    });
+    ).toEqual([["list"]]);
   });
 
   it("names both source and destination for move and copy", () => {
     expect(
       affectedPaths({ kind: "move", path: ["a"], newPath: ["b", "a"] }),
-    ).toEqual({ document: [["a"], ["b", "a"]], trash: [] });
+    ).toEqual([["a"], ["b", "a"]]);
     expect(
       affectedPaths({ kind: "copy", path: ["a"], newPath: ["b", "a"] }),
-    ).toEqual({ document: [["a"], ["b", "a"]], trash: [] });
+    ).toEqual([["a"], ["b", "a"]]);
   });
 
-  it("names the trash record by ID for recover and permanent-delete", () => {
-    expect(
-      affectedPaths({ kind: "recover", path: ["a"], trashId: "t1" }),
-    ).toEqual({ document: [["a"]], trash: ["t1"] });
-    expect(
-      affectedPaths({ kind: "permanent-delete", path: ["a"], trashId: "t1" }),
-    ).toEqual({ document: [], trash: ["t1"] });
-  });
-
-  it("treats empty-trash as sensitive to any trash change", () => {
-    expect(affectedPaths({ kind: "empty-trash" })).toEqual({
-      document: [],
-      trash: "all",
-    });
+  it("names the deleted path for delete", () => {
+    expect(affectedPaths({ kind: "delete", path: ["a"] })).toEqual([["a"]]);
   });
 
   it("names the target path for restore", () => {
@@ -43,6 +28,6 @@ describe("affectedPaths", () => {
         path: ["tips"],
         revisionSha: "abc1234",
       }),
-    ).toEqual({ document: [["tips"]], trash: [] });
+    ).toEqual([["tips"]]);
   });
 });

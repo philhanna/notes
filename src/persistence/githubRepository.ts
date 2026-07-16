@@ -1,8 +1,6 @@
 import type { AuthError } from "../auth/types.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
 import { parseDocument, serializeDocument } from "../domain/serialize.ts";
-import { EMPTY_TRASH, parseTrash, serializeTrash } from "../domain/trash.ts";
-import type { TrashDocument } from "../domain/trash.ts";
 import type { JsonObject } from "../domain/types.ts";
 import type { Result } from "../domain/result.ts";
 import { err, ok } from "../domain/result.ts";
@@ -30,7 +28,6 @@ import type {
 import type { PersistError } from "./types.ts";
 
 const DOCUMENT_PATH = "remember.json";
-const TRASH_PATH = ".trash/trash.json";
 
 interface RepoResponseBody {
   private?: boolean;
@@ -40,11 +37,10 @@ interface RepoResponseBody {
 
 /**
  * GitHub-backed Repository adapter (design.md 9), using the Git Data API
- * (blob → tree → commit → ref) so remember.json and .trash/trash.json
- * always update as one atomic commit (design.md 7.3, 9; proven by
- * spikes/02-atomic-commit.mjs and spikes/03-stale-writer.mjs). `sha`
- * throughout this module is the branch head commit sha, not a file blob
- * sha — see repository.ts's LoadedDocument doc comment for why.
+ * (blob → tree → commit → ref; proven by spikes/02-atomic-commit.mjs and
+ * spikes/03-stale-writer.mjs). `sha` throughout this module is the branch
+ * head commit sha, not a file blob sha — see repository.ts's LoadedDocument
+ * doc comment for why.
  */
 export function createGithubRepository(
   config: RepoConfig,
@@ -90,7 +86,7 @@ export function createGithubRepository(
     return getTreeEntries(config, accessToken, treeShaResult.value);
   }
 
-  /** Reads remember.json's content at a specific commit, ignoring trash. */
+  /** Reads remember.json's content at a specific commit. */
   async function readDocumentAtCommit(
     accessToken: string,
     commitSha: string,
@@ -112,7 +108,7 @@ export function createGithubRepository(
     return ok(parsedDocument.value);
   }
 
-  /** Reads remember.json and .trash/trash.json from one consistent commit's tree, avoiding a torn read. */
+  /** Reads remember.json from the current commit's tree. */
   async function loadDocument(): Promise<Result<LoadedDocument, PersistError>> {
     return withToken(async (accessToken) => {
       const headResult = await getHeadCommitSha(config, accessToken);
@@ -136,23 +132,7 @@ export function createGithubRepository(
       const parsedDocument = parseDocument(documentTextResult.value);
       if (!parsedDocument.ok) return err({ kind: "malformed" });
 
-      // .trash/trash.json may not exist yet (a repo from before Phase 3, or
-      // one that has never had a deletion) — that's an empty trash, not an error.
-      const trashEntry = entries.find((entry) => entry.path === TRASH_PATH);
-      let trash: TrashDocument = EMPTY_TRASH;
-      if (trashEntry) {
-        const trashTextResult = await getBlobText(
-          config,
-          accessToken,
-          trashEntry.sha,
-        );
-        if (!trashTextResult.ok) return trashTextResult;
-        const parsedTrash = parseTrash(trashTextResult.value);
-        if (!parsedTrash.ok) return err({ kind: "malformed" });
-        trash = parsedTrash.value;
-      }
-
-      return ok({ document: parsedDocument.value, trash, sha: headSha });
+      return ok({ document: parsedDocument.value, sha: headSha });
     });
   }
 
@@ -251,11 +231,7 @@ export function createGithubRepository(
           commitResult.value,
         );
         if (!refResult.ok) return refResult;
-        return ok({
-          document: {},
-          trash: EMPTY_TRASH,
-          sha: commitResult.value,
-        });
+        return ok({ document: {}, sha: commitResult.value });
       }
 
       // No commits at all yet — a brand-new repository created with no
@@ -282,12 +258,12 @@ export function createGithubRepository(
         commitResult.value,
       );
       if (!refResult.ok) return refResult;
-      return ok({ document: {}, trash: EMPTY_TRASH, sha: commitResult.value });
+      return ok({ document: {}, sha: commitResult.value });
     });
   }
 
   async function save(
-    state: { document: JsonObject; trash: TrashDocument },
+    state: { document: JsonObject },
     baseSha: string,
     operation: Operation,
   ): Promise<Result<{ sha: string }, PersistError>> {
@@ -300,16 +276,6 @@ export function createGithubRepository(
       if (!treeShaResult.ok) return treeShaResult;
       const baseTreeSha = treeShaResult.value;
 
-      const baseEntriesResult = await getTreeEntries(
-        config,
-        accessToken,
-        baseTreeSha,
-      );
-      if (!baseEntriesResult.ok) return baseEntriesResult;
-      const hadTrashFile = baseEntriesResult.value.some(
-        (entry) => entry.path === TRASH_PATH,
-      );
-
       const documentBlobResult = await createBlob(
         config,
         accessToken,
@@ -320,18 +286,6 @@ export function createGithubRepository(
       const entries: TreeEntry[] = [
         { path: DOCUMENT_PATH, sha: documentBlobResult.value },
       ];
-      // Only writes .trash/trash.json once it's real content, or it already
-      // existed — the file comes into existence lazily on the first delete,
-      // with no separate migration step for repos created before Phase 3.
-      if (hadTrashFile || state.trash.records.length > 0) {
-        const trashBlobResult = await createBlob(
-          config,
-          accessToken,
-          serializeTrash(state.trash),
-        );
-        if (!trashBlobResult.ok) return trashBlobResult;
-        entries.push({ path: TRASH_PATH, sha: trashBlobResult.value });
-      }
 
       const treeResult = await createTree(
         config,

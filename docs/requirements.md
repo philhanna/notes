@@ -48,25 +48,14 @@ rather than the original open question (see `docs/questions.md`).
 - Must require explicit confirmation before any destructive action,
   including deletion and replacing a scalar with a subtree (or the reverse)
 - Must never silently overwrite an existing key at the destination of a
-  move, copy, or recovery — the user must choose how to resolve the conflict
-
-### Trash and recovery
-- Deleting a key=value pair or subtree must move it to trash rather than
-  erasing it immediately
-- Each trash entry must retain a stable ID, deletion time, original
-  location, value type, and the complete original content (including all
-  descendants, for a deleted subtree)
-- Must support recovering a deleted entry to its original location, or to a
-  different location if the original is now occupied
-- Must support permanently deleting a single trash entry or emptying all
-  trash
-- Must make clear that emptying trash removes it from current view only; it
-  does not erase the data from the underlying revision history
+  move or copy — the user must choose how to resolve the conflict
+- Deleting a key=value pair or subtree permanently removes it (including all
+  descendants, for a subtree); there is no trash or recovery
 
 ### Search
 - Must support full-text, case-insensitive search across the current tree,
   matching keys, values, and breadcrumb paths
-- Search must exclude trash and historical revisions
+- Search must exclude historical revisions
 
 ### History and restoration
 - Every successful change must be recorded as a distinct, retrievable
@@ -80,7 +69,7 @@ rather than the original open question (see `docs/questions.md`).
 ### Export
 - Must support exporting the current tree as a standalone JSON file the
   user can save locally
-- Export must contain only the active tree — no trash, history metadata,
+- Export must contain only the active tree — no history metadata,
   credentials, or repository settings
 
 ### Authentication and security

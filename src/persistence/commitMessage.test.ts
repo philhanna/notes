@@ -55,28 +55,10 @@ describe("describeOperation", () => {
     ).toBe("Copy /tips to /tips-copy");
   });
 
-  it("describes delete, recover, and permanent-delete by original path", () => {
+  it("describes delete by original path", () => {
     expect(describeOperation({ kind: "delete", path: ["with-rating"] })).toBe(
       "Delete /with-rating",
     );
-    expect(
-      describeOperation({
-        kind: "recover",
-        path: ["with-rating"],
-        trashId: "t1",
-      }),
-    ).toBe("Restore /with-rating from trash");
-    expect(
-      describeOperation({
-        kind: "permanent-delete",
-        path: ["with-rating"],
-        trashId: "t1",
-      }),
-    ).toBe("Permanently delete /with-rating");
-  });
-
-  it("describes empty-trash without a path", () => {
-    expect(describeOperation({ kind: "empty-trash" })).toBe("Empty trash");
   });
 
   it("describes restore with the path and an abbreviated revision sha", () => {
