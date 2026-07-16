@@ -49,6 +49,22 @@ test("traps focus in the delete confirmation dialog and supports Escape to cance
   await expect(page.getByText("hardinfo")).toBeVisible();
 });
 
+test("expands the tree surface for the bottom row actions menu", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 500 });
+  const tree = page.getByRole("tree", { name: "Notes" });
+  const tips = page.getByRole("treeitem", { name: /^tips,/ });
+
+  const closedHeight = await tree.evaluate((element) => element.scrollHeight);
+  await tips.getByLabel("Actions for tips").click();
+
+  const menu = tips.locator(".tree-row__actions-menu");
+  await expect(menu.getByRole("button", { name: "Delete" })).toBeInViewport();
+  const openHeight = await tree.evaluate((element) => element.scrollHeight);
+  expect(openHeight).toBeGreaterThan(closedHeight);
+});
+
 test("creates a new entry with the keyboard alone", async ({ page }) => {
   await page.getByRole("button", { name: "Add child to Notes" }).press("Enter");
   await page.getByLabel("Key").fill("keyboard-key");

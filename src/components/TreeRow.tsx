@@ -280,7 +280,19 @@ export function TreeRow({
             +
           </button>
         )}
-        <details className="tree-row__actions" ref={actionsRef}>
+        <details
+          className="tree-row__actions"
+          ref={actionsRef}
+          onToggle={(event) => {
+            if (!event.currentTarget.open) return;
+            const details = event.currentTarget;
+            requestAnimationFrame(() => {
+              details
+                .querySelector(".tree-row__actions-menu")
+                ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+            });
+          }}
+        >
           <summary
             className="tree-row__actions-toggle"
             aria-label={`Actions for ${node.label}`}

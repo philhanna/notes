@@ -306,6 +306,15 @@ code,
   padding: 0.2rem 0;
 }
 
+.tree:has(.tree-row__actions[open]) {
+  /*
+   * The horizontal scroll surface also clips vertical overflow. Action menus
+   * are absolutely positioned, so reserve enough in-flow space for the
+   * tallest menu while one is open, including on coarse-pointer layouts.
+   */
+  padding-bottom: 24rem;
+}
+
 .tree-row {
   position: relative;
   outline: none;
