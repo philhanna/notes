@@ -359,6 +359,12 @@ code,
   line-height: 1;
 }
 
+.tree-row__disclosure {
+  color: var(--tan-700);
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
 .tree-row__disclosure--leaf {
   display: block;
 }
