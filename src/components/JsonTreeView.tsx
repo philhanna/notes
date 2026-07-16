@@ -106,6 +106,11 @@ function JsonTreeChildren({
         const label =
           typeof entry.key === "number" ? `[${entry.key}]` : entry.key;
         const container = isJsonObject(entry.value) || isJsonArray(entry.value);
+        const count = isJsonArray(entry.value)
+          ? entry.value.length
+          : container
+            ? Object.keys(entry.value as Record<string, JsonValue>).length
+            : 0;
         return (
           <li key={entry.key} className="child-row">
             <div className="child-row__main">
@@ -115,7 +120,7 @@ function JsonTreeChildren({
                   className="child-row__open"
                   onClick={() => onOpen(entry.key)}
                 >
-                  {label}
+                  {label} — {count}
                 </button>
               ) : (
                 <>
