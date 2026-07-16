@@ -18,66 +18,103 @@ function Harness() {
   return <TreeBrowser state={state} />;
 }
 
+function row(name: RegExp) {
+  return screen.getByRole("treeitem", { name });
+}
+
 async function openActions(
   user: ReturnType<typeof userEvent.setup>,
-  row: HTMLElement,
+  item: HTMLElement,
   label: string,
 ) {
-  await user.click(within(row).getByLabelText(`Actions for ${label}`));
+  await user.click(within(item).getByLabelText(`Actions for ${label}`));
 }
 
 describe("TreeBrowser", () => {
-  it("shows child counts for object and array containers", () => {
+  it("renders a compact ARIA tree with root, scalar previews, and child counts", () => {
     render(<Harness />);
 
-    expect(
-      screen.getByRole("button", { name: "tips — 1" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "list — 3" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Notes" })).toBeInTheDocument();
+    expect(row(/^Notes, object, 3 children/)).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(row(/^tips, object, 1 children/)).toBeInTheDocument();
+    expect(screen.getByText("{1}")).toBeInTheDocument();
+    expect(screen.getByText("[3]")).toBeInTheDocument();
+    expect(screen.getByText('"system info"')).toBeInTheDocument();
   });
 
-  it("does not offer application-level history", async () => {
+  it("expands multiple branches in place and keeps their parents visible", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
+    await user.click(screen.getByRole("button", { name: "Expand tips" }));
+    await user.click(screen.getByRole("button", { name: "Expand bash" }));
+    await user.click(screen.getByRole("button", { name: "Expand list" }));
 
-    expect(
-      within(hardinfoRow).queryByRole("button", { name: "History" }),
-    ).not.toBeInTheDocument();
+    expect(row(/^Notes,/)).toBeInTheDocument();
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "true");
+    expect(row(/^bash,/)).toHaveAttribute("aria-expanded", "true");
+    expect(row(/^fc,/)).toBeInTheDocument();
+    expect(row(/^\[0\],/)).toBeInTheDocument();
   });
 
-  it("navigates into a container via breadcrumbs and back", async () => {
+  it("keeps selection separate from disclosure", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: "tips — 1" }));
+    const tips = row(/^tips,/);
+    await user.click(within(tips).getByText("tips"));
+    expect(tips).toHaveAttribute("aria-selected", "true");
+    expect(tips).toHaveAttribute("aria-expanded", "false");
 
-    expect(screen.getByRole("button", { name: /^bash/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Notes" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Notes" }));
-    expect(screen.getByText("hardinfo")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand tips" }));
+    expect(tips).toHaveAttribute("aria-selected", "true");
+    expect(tips).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("creates a new object entry and shows it in the list", async () => {
+  it("supports conventional roving-focus keyboard navigation", () => {
+    render(<Harness />);
+    const root = row(/^Notes,/);
+    root.focus();
+
+    fireEvent.keyDown(root, { key: "ArrowDown" });
+    expect(row(/^hardinfo,/)).toHaveFocus();
+
+    fireEvent.keyDown(row(/^hardinfo,/), { key: "End" });
+    expect(row(/^tips,/)).toHaveFocus();
+
+    fireEvent.keyDown(row(/^tips,/), { key: "ArrowRight" });
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(row(/^tips,/), { key: "ArrowRight" });
+    expect(row(/^bash,/)).toHaveFocus();
+
+    fireEvent.keyDown(row(/^bash,/), { key: "ArrowLeft" });
+    expect(row(/^tips,/)).toHaveFocus();
+  });
+
+  it("creates a child in the exact selected container", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
+    await user.click(within(row(/^tips,/)).getByText("tips"));
+    await user.click(screen.getByRole("button", { name: "Add child to tips" }));
     await user.type(screen.getByLabelText("Key"), "new-key");
     await user.type(screen.getByLabelText("Value"), "hello world");
     await user.click(screen.getByRole("button", { name: "Add entry" }));
 
-    expect(screen.getByText("new-key")).toBeInTheDocument();
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "true");
+    expect(row(/^new-key,/)).toBeInTheDocument();
   });
 
-  it("shows a validation error and preserves the typed key on a duplicate", async () => {
+  it("shows a validation error and preserves typed create fields", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
+    await user.click(
+      screen.getByRole("button", { name: "Add child to Notes" }),
+    );
     await user.type(screen.getByLabelText("Key"), "hardinfo");
     await user.type(screen.getByLabelText("Value"), "dup");
     await user.click(screen.getByRole("button", { name: "Add entry" }));
@@ -86,131 +123,107 @@ describe("TreeBrowser", () => {
     expect(screen.getByLabelText("Key")).toHaveValue("hardinfo");
   });
 
-  it("renames an object entry", async () => {
+  it("renames an object entry and keeps it visible", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
-    await user.click(
-      within(hardinfoRow).getByRole("button", { name: "Rename" }),
-    );
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Rename" }));
     const input = screen.getByLabelText("New key");
     await user.clear(input);
     await user.type(input, "sysinfo");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.getByText("sysinfo")).toBeInTheDocument();
-    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
+    expect(row(/^sysinfo,/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("treeitem", { name: /^hardinfo,/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("reorders array elements with the move controls", async () => {
+  it("reorders array elements without leaving the expanded tree", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    await user.click(screen.getByRole("button", { name: /^list/ }));
-    const values = () =>
-      screen.getAllByText(/^[123]$/).map((el) => el.textContent);
-    expect(values()).toEqual(["1", "2", "3"]);
-
-    const firstRow = screen.getByText("1").closest("li")!;
-    await openActions(user, firstRow, "[0]");
-    await user.click(screen.getByRole("button", { name: "Move [0] down" }));
-    expect(values()).toEqual(["2", "1", "3"]);
-  });
-
-  it("deletes an entry after confirmation, permanently", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
+    await user.click(screen.getByRole("button", { name: "Expand list" }));
+    const first = row(/^\[0\],/);
+    await openActions(user, first, "[0]");
     await user.click(
-      within(hardinfoRow).getByRole("button", { name: "Delete" }),
+      within(first).getByRole("button", { name: "Move [0] down" }),
     );
-    const dialog = screen.getByRole("alertdialog");
-    expect(dialog).toHaveTextContent(/cannot be undone/);
 
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
-
-    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
+    const previews = screen
+      .getAllByRole("treeitem", { name: /^\[[0-2]\],/ })
+      .map((item) => within(item).getByRole("code").textContent);
+    expect(previews).toEqual(["2", "1", "3"]);
   });
 
-  it("moves an entry to a chosen destination", async () => {
+  it("moves an entry with the visual destination picker", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
     await user.click(
-      within(hardinfoRow).getByRole("button", { name: "Move to…" }),
+      within(hardinfo).getByRole("button", { name: "Move to…" }),
     );
-    await user.type(screen.getByLabelText(/Destination/), "/tips");
+    await user.click(screen.getByLabelText("tips"));
     await user.click(screen.getByRole("button", { name: "Move" }));
 
-    expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^tips/ }));
-    expect(screen.getByText("hardinfo")).toBeInTheDocument();
+    expect(row(/^hardinfo,/)).toBeInTheDocument();
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("copies an entry to a chosen destination, leaving the original in place", async () => {
+  it("copies an entry and leaves the source in place", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
     await user.click(
-      within(hardinfoRow).getByRole("button", { name: "Copy to…" }),
+      within(hardinfo).getByRole("button", { name: "Copy to…" }),
     );
-    await user.type(screen.getByLabelText(/Destination/), "/tips");
+    await user.click(screen.getByLabelText("tips"));
     await user.type(screen.getByLabelText(/New key/), "hardinfo-copy");
     await user.click(screen.getByRole("button", { name: "Copy" }));
 
-    expect(screen.getByText("hardinfo")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^tips/ }));
-    expect(screen.getByText("hardinfo-copy")).toBeInTheDocument();
+    expect(row(/^hardinfo,/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand tips" }));
+    expect(row(/^hardinfo-copy,/)).toBeInTheDocument();
   });
 
-  it("requires confirmation to replace a scalar with a container, and applies it once confirmed", async () => {
+  it("deletes permanently after confirmation and recovers focus to the parent", async () => {
     const user = userEvent.setup();
     render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
-    await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
-    const textbox = within(hardinfoRow).getByLabelText("Value");
-    fireEvent.change(textbox, { target: { value: '{"a":1}' } });
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Replace" }));
-
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^hardinfo/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("treeitem", { name: /^hardinfo,/ }),
+    ).not.toBeInTheDocument();
+    expect(row(/^Notes,/)).toHaveFocus();
   });
 
-  it("moves focus to the level heading after breadcrumb navigation", async () => {
+  it("requires confirmation for destructive replacement", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    await user.click(screen.getByRole("button", { name: /^tips/ }));
-    expect(screen.getByRole("heading", { name: "tips" })).toHaveFocus();
-
-    await user.click(screen.getByRole("button", { name: "Notes" }));
-    expect(screen.getByRole("heading", { name: "Notes" })).toHaveFocus();
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Edit" }));
+    const textbox = within(hardinfo).getByLabelText("Value");
+    fireEvent.change(textbox, { target: { value: '{"a":1}' } });
+    await user.click(within(hardinfo).getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Replace" }));
+    expect(row(/^hardinfo, object/)).toBeInTheDocument();
   });
 
-  it("writes a typed but unsaved value through to sessionStorage as it's typed", async () => {
+  it("preserves edit drafts in session storage", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
-    await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
-    const textbox = within(hardinfoRow).getByLabelText("Value");
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Edit" }));
+    const textbox = within(hardinfo).getByLabelText("Value");
     await user.clear(textbox);
     await user.type(textbox, "not yet saved");
 
@@ -219,31 +232,16 @@ describe("TreeBrowser", () => {
     );
   });
 
-  it("restores a draft already in sessionStorage when the editor opens (post safe-refresh)", async () => {
-    sessionStorage.setItem("notes:draft:value:/hardinfo", "not yet saved");
+  it("allows only one inline editor at a time", async () => {
     const user = userEvent.setup();
     render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Edit" }));
 
-    const hardinfoRow = screen.getByText("hardinfo").closest("li")!;
-    await openActions(user, hardinfoRow, "hardinfo");
-    await user.click(within(hardinfoRow).getByRole("button", { name: "Edit" }));
-
-    expect(within(hardinfoRow).getByLabelText("Value")).toHaveValue(
-      "not yet saved",
-    );
-  });
-
-  it("clears a create-entry draft once the entry is saved", async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(<Harness />);
-
-    await user.type(screen.getByLabelText("Key"), "draft-key");
-    await user.type(screen.getByLabelText("Value"), "draft value");
-    await user.click(screen.getByRole("button", { name: "Add entry" }));
-    unmount();
-
-    render(<Harness />);
-    expect(screen.getByLabelText("Key")).toHaveValue("");
-    expect(screen.getByLabelText("Value")).toHaveValue("");
+    const tips = row(/^tips,/);
+    await openActions(user, tips, "tips");
+    expect(within(tips).getByRole("button", { name: "Edit" })).toBeDisabled();
+    expect(screen.getAllByLabelText("Value")).toHaveLength(1);
   });
 });

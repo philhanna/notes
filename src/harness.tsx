@@ -5,6 +5,7 @@ import { createInMemoryRepository } from "./persistence/inMemoryRepository.ts";
 import { ExportButton } from "./components/ExportButton.tsx";
 import { SearchView } from "./components/SearchView.tsx";
 import { TreeBrowser } from "./components/TreeBrowser.tsx";
+import type { Path } from "./domain/types.ts";
 import "./index.css";
 
 /**
@@ -32,6 +33,12 @@ export function Harness() {
     initialSha: "sha-0",
   });
   const [view, setView] = useState<"tree" | "search">("tree");
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
+    () => new Set([""]),
+  );
+  const [selectedPath, setSelectedPath] = useState<Path>([]);
+  const [focusedPath, setFocusedPath] = useState<Path>([]);
+  const [revealPath, setRevealPath] = useState<Path | null>(null);
 
   return (
     <>
@@ -52,11 +59,25 @@ export function Harness() {
         {view === "search" && (
           <SearchView
             document={documentState.document}
-            onNavigate={documentState.navigate}
+            onSelectPath={setRevealPath}
             onClose={() => setView("tree")}
           />
         )}
-        {view === "tree" && <TreeBrowser state={documentState} />}
+        {view === "tree" && (
+          <TreeBrowser
+            state={documentState}
+            treeState={{
+              expandedPaths,
+              selectedPath,
+              focusedPath,
+              setExpandedPaths,
+              setSelectedPath,
+              setFocusedPath,
+            }}
+            revealPath={revealPath}
+            onRevealHandled={() => setRevealPath(null)}
+          />
+        )}
         <nav className="app-actions" aria-label="Note actions">
           {view !== "search" && (
             <button type="button" onClick={() => setView("search")}>

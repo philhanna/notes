@@ -45,29 +45,52 @@ export interface DocumentPersistence {
 
 export interface DocumentState {
   document: JsonObject;
+  /** Compatibility navigation state; tree-view callers use path-explicit mutations. */
   currentPath: Path;
   children: ChildEntry[];
   navigate: (path: Path) => void;
-  createEntry: (
-    key: string,
-    value: JsonValue,
-  ) => Promise<Result<JsonObject, MutationError>>;
-  createElement: (
-    value: JsonValue,
-  ) => Promise<Result<JsonObject, MutationError>>;
-  rename: (
-    oldKey: string,
-    newKey: string,
-  ) => Promise<Result<JsonObject, MutationError>>;
+  createEntry: {
+    (
+      parentPath: Path,
+      key: string,
+      value: JsonValue,
+    ): Promise<Result<JsonObject, MutationError>>;
+    (key: string, value: JsonValue): Promise<Result<JsonObject, MutationError>>;
+  };
+  createElement: {
+    (
+      parentPath: Path,
+      value: JsonValue,
+    ): Promise<Result<JsonObject, MutationError>>;
+    (value: JsonValue): Promise<Result<JsonObject, MutationError>>;
+  };
+  rename: {
+    (
+      parentPath: Path,
+      oldKey: string,
+      newKey: string,
+    ): Promise<Result<JsonObject, MutationError>>;
+    (
+      oldKey: string,
+      newKey: string,
+    ): Promise<Result<JsonObject, MutationError>>;
+  };
   setValue: (
     path: Path,
     value: JsonValue,
     confirmReplace?: boolean,
   ) => Promise<Result<JsonObject, MutationError>>;
-  reorder: (
-    fromIndex: number,
-    toIndex: number,
-  ) => Promise<Result<JsonObject, MutationError>>;
+  reorder: {
+    (
+      parentPath: Path,
+      fromIndex: number,
+      toIndex: number,
+    ): Promise<Result<JsonObject, MutationError>>;
+    (
+      fromIndex: number,
+      toIndex: number,
+    ): Promise<Result<JsonObject, MutationError>>;
+  };
   move: (
     fromPath: Path,
     toParentPath: Path,
@@ -210,30 +233,80 @@ export function useDocument(
   );
 
   const createEntry = useCallback(
-    (key: string, value: JsonValue) =>
-      asDocumentResult(
-        (doc) => createObjectEntry(doc, currentPath, key, value),
-        { kind: "create-entry", path: [...currentPath, key] },
-      ),
+    (
+      parentPathOrKey: Path | string,
+      keyOrValue: string | JsonValue,
+      maybeValue?: JsonValue,
+    ) => {
+      const parentPath =
+        typeof parentPathOrKey === "string" ? currentPath : parentPathOrKey;
+      const key =
+        typeof parentPathOrKey === "string"
+          ? parentPathOrKey
+          : String(keyOrValue);
+      const value =
+        typeof parentPathOrKey === "string"
+          ? (keyOrValue as JsonValue)
+          : (maybeValue as JsonValue);
+      return asDocumentResult(
+        (doc) => createObjectEntry(doc, parentPath, key, value),
+        { kind: "create-entry", path: [...parentPath, key] },
+      );
+    },
     [asDocumentResult, currentPath],
   );
 
   const createElement = useCallback(
-    (value: JsonValue) =>
-      asDocumentResult((doc) => createArrayElement(doc, currentPath, value), {
-        kind: "create-element",
-        path: [...currentPath, children.length],
-      }),
-    [asDocumentResult, currentPath, children.length],
+    (parentPathOrValue: Path | JsonValue, maybeValue?: JsonValue) => {
+      const explicit = maybeValue !== undefined;
+      const parentPath = explicit ? (parentPathOrValue as Path) : currentPath;
+      const value = explicit
+        ? (maybeValue as JsonValue)
+        : (parentPathOrValue as JsonValue);
+      return asDocumentResult(
+        (doc) => createArrayElement(doc, parentPath, value),
+        {
+          kind: "create-element",
+          path: [
+            ...parentPath,
+            (() => {
+              const parent = getAtPath(document, parentPath);
+              return isJsonArray(parent) ? parent.length : 0;
+            })(),
+          ],
+        },
+      );
+    },
+    [asDocumentResult, currentPath, document],
   );
 
   const rename = useCallback(
-    (oldKey: string, newKey: string) =>
-      asDocumentResult((doc) => renameKey(doc, currentPath, oldKey, newKey), {
-        kind: "rename",
-        path: [...currentPath, oldKey],
-        newPath: [...currentPath, newKey],
-      }),
+    (
+      parentPathOrOldKey: Path | string,
+      oldKeyOrNewKey: string,
+      maybeNewKey?: string,
+    ) => {
+      const parentPath =
+        typeof parentPathOrOldKey === "string"
+          ? currentPath
+          : parentPathOrOldKey;
+      const oldKey =
+        typeof parentPathOrOldKey === "string"
+          ? parentPathOrOldKey
+          : oldKeyOrNewKey;
+      const newKey =
+        typeof parentPathOrOldKey === "string"
+          ? oldKeyOrNewKey
+          : (maybeNewKey as string);
+      return asDocumentResult(
+        (doc) => renameKey(doc, parentPath, oldKey, newKey),
+        {
+          kind: "rename",
+          path: [...parentPath, oldKey],
+          newPath: [...parentPath, newKey],
+        },
+      );
+    },
     [asDocumentResult, currentPath],
   );
 
@@ -247,11 +320,28 @@ export function useDocument(
   );
 
   const reorder = useCallback(
-    (fromIndex: number, toIndex: number) =>
-      asDocumentResult(
-        (doc) => reorderArrayElement(doc, currentPath, fromIndex, toIndex),
-        { kind: "reorder", path: currentPath },
-      ),
+    (
+      parentPathOrFromIndex: Path | number,
+      fromIndexOrToIndex: number,
+      maybeToIndex?: number,
+    ) => {
+      const parentPath =
+        typeof parentPathOrFromIndex === "number"
+          ? currentPath
+          : parentPathOrFromIndex;
+      const fromIndex =
+        typeof parentPathOrFromIndex === "number"
+          ? parentPathOrFromIndex
+          : fromIndexOrToIndex;
+      const toIndex =
+        typeof parentPathOrFromIndex === "number"
+          ? fromIndexOrToIndex
+          : (maybeToIndex as number);
+      return asDocumentResult(
+        (doc) => reorderArrayElement(doc, parentPath, fromIndex, toIndex),
+        { kind: "reorder", path: parentPath },
+      );
+    },
     [asDocumentResult, currentPath],
   );
 

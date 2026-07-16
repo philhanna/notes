@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth.ts";
 import { useDocument } from "../app/useDocument.ts";
 import { useOnlineStatus } from "../app/useOnlineStatus.ts";
 import type { JsonObject } from "../domain/types.ts";
+import type { Path } from "../domain/types.ts";
 import {
   activateWaitingServiceWorker,
   registerServiceWorker,
@@ -17,6 +18,8 @@ import { SearchView } from "./SearchView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
 import { TreeBrowser } from "./TreeBrowser.tsx";
+
+const TREE_EXPANSION_KEY = "notes/tree-expanded";
 
 type LoadState =
   | { phase: "idle" }
@@ -172,18 +175,50 @@ function ReadyApp({
     initialSha: state.sha,
   });
   const [view, setView] = useState<"tree" | "search">("tree");
+  const [expandedPaths, setExpandedPaths] =
+    useState<Set<string>>(loadExpandedPaths);
+  const [selectedPath, setSelectedPath] = useState<Path>([]);
+  const [focusedPath, setFocusedPath] = useState<Path>([]);
+  const [revealPath, setRevealPath] = useState<Path | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(
+      TREE_EXPANSION_KEY,
+      JSON.stringify([...expandedPaths]),
+    );
+  }, [expandedPaths]);
+
+  function signOut() {
+    localStorage.removeItem(TREE_EXPANSION_KEY);
+    onSignOut();
+  }
+
   return (
     <>
       {view === "search" && (
         <SearchView
           document={documentState.document}
-          onNavigate={documentState.navigate}
+          onSelectPath={(path) => setRevealPath(path)}
           onClose={() => setView("tree")}
         />
       )}
-      {view === "tree" && <TreeBrowser state={documentState} />}
+      {view === "tree" && (
+        <TreeBrowser
+          state={documentState}
+          treeState={{
+            expandedPaths,
+            selectedPath,
+            focusedPath,
+            setExpandedPaths,
+            setSelectedPath,
+            setFocusedPath,
+          }}
+          revealPath={revealPath}
+          onRevealHandled={() => setRevealPath(null)}
+        />
+      )}
       <nav className="app-actions" aria-label="Note actions">
-        <button type="button" onClick={onSignOut}>
+        <button type="button" onClick={signOut}>
           Sign out
         </button>
         {view !== "search" && (
@@ -195,4 +230,17 @@ function ReadyApp({
       </nav>
     </>
   );
+}
+
+function loadExpandedPaths(): Set<string> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(TREE_EXPANSION_KEY) ?? "[]");
+    if (!Array.isArray(stored)) return new Set([""]);
+    const pointers = stored.filter(
+      (value): value is string => typeof value === "string",
+    );
+    return new Set(pointers.length === 0 ? [""] : pointers);
+  } catch {
+    return new Set([""]);
+  }
 }

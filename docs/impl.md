@@ -155,11 +155,11 @@ untouched. `src/app/useOnlineStatus.ts` adds a `navigator.onLine` banner in
 `App.tsx` so connectivity loss is reported proactively rather than only on
 the next failed save. `ConfirmDialog.tsx` is now a real modal: it traps
 Tab/Shift+Tab focus, treats Escape as Cancel, and restores focus to whatever
-triggered it. `TreeBrowser.tsx` moves focus to the
-current level's heading after navigation, since `react-router-dom`
-(a listed but, this session confirmed, never-imported dependency) provides
-no router lifecycle to hook — it has been removed rather than left as dead
-weight. `src/index.css` adds a `prefers-reduced-motion` guard, a `min-width`
+triggered it. The original drill-down `TreeBrowser.tsx` moved focus to each
+newly navigated level's heading. That browser has since been replaced by the
+continuous ARIA tree described below. `react-router-dom` (listed but never
+imported) was removed rather than left as dead weight. `src/index.css` adds a
+`prefers-reduced-motion` guard, a `min-width`
 alongside the existing touch-target `min-height`, and a skip-to-content
 link. `index.html` adds a restrictive `Content-Security-Policy` `<meta>` tag
 (GitHub Pages cannot set custom response headers, so this is the only option
@@ -775,6 +775,19 @@ component tests already covering them (`domain/search.test.ts`,
 `components/ExportButton.test.tsx`). `npm run lint`, `npm run typecheck`,
 `npm run format`, and `npm run build` all pass.
 
+The file-explorer tree view in `docs/tree_view.md` is implemented.
+`useDocument.ts` exposes path-explicit create, rename, and reorder mutations
+while retaining its earlier navigation facade for compatibility.
+`treeViewState.ts` derives the authoritative flat visible-node order and
+contains independently tested expansion validation and rename/reorder/delete
+path reconciliation. `TreeBrowser.tsx`/`TreeRow.tsx` render a compact nested
+ARIA tree with independent disclosure and selection, roving focus, inline
+single-editor coordination, inline child creation, and a visual move/copy
+destination picker with an advanced JSON Pointer fallback. Expansion metadata
+is persisted in local storage, cleared on sign-out, and lifted through the
+temporary Search view. Search now reveals, selects, scrolls to, and focuses the
+exact result path. The former breadcrumb/card browser is retired.
+
 ### Immediate next steps
 
 1. ~~Scaffold the Vite + TypeScript project and CI quality gates.~~ Done.
@@ -826,3 +839,8 @@ component tests already covering them (`domain/search.test.ts`,
     - the live two-real-browser-session GitHub acceptance test (design.md 14);
     - enabling GitHub's repository-level secret scanning/push protection
       (Settings → Code security — a one-time account action, not code).
+14. ~~Replace the drill-down breadcrumb/card browser with the continuous,
+    compact, keyboard-accessible file-explorer tree described in
+    `docs/tree_view.md`; make mutations path-explicit, reconcile path-keyed
+    view state, persist expansion metadata, and integrate exact search-result
+    reveal.~~ Done.

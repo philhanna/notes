@@ -15,25 +15,28 @@ test("has no automatically detectable accessibility violations", async ({
   expect(results.violations).toEqual([]);
 });
 
-test("supports keyboard-only navigation into a container and back", async ({
+test("supports conventional keyboard-only tree navigation", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: /^tips/ }).focus();
-  await page.keyboard.press("Enter");
+  const root = page.getByRole("treeitem", { name: /^Notes,/ });
+  await root.focus();
+  await page.keyboard.press("End");
+  const tips = page.getByRole("treeitem", { name: /^tips,/ });
+  await expect(tips).toBeFocused();
 
-  await expect(page.getByRole("heading", { name: "tips" })).toBeFocused();
-  await expect(page.getByRole("button", { name: /^bash/ })).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(tips).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("treeitem", { name: /^bash,/ })).toBeFocused();
 
-  await page.getByRole("button", { name: "Notes" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Notes", level: 2 }),
-  ).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(tips).toBeFocused();
 });
 
 test("traps focus in the delete confirmation dialog and supports Escape to cancel", async ({
   page,
 }) => {
-  const hardinfoRow = page.locator("li.child-row", { hasText: "hardinfo" });
+  const hardinfoRow = page.getByRole("treeitem", { name: /^hardinfo,/ });
   await hardinfoRow.getByLabel("Actions for hardinfo").click();
   await hardinfoRow.getByRole("button", { name: "Delete" }).click();
 
@@ -47,11 +50,25 @@ test("traps focus in the delete confirmation dialog and supports Escape to cance
 });
 
 test("creates a new entry with the keyboard alone", async ({ page }) => {
+  await page.getByRole("button", { name: "Add child to Notes" }).press("Enter");
   await page.getByLabel("Key").fill("keyboard-key");
   await page.getByLabel("Value").fill("keyboard value");
   await page.getByRole("button", { name: "Add entry" }).press("Enter");
 
   await expect(page.getByText("keyboard-key")).toBeVisible();
+});
+
+test("search reveals, selects, and focuses the exact matching node", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByLabel("Search notes").fill("recent history");
+  await page.getByRole("button", { name: /fc/ }).click();
+
+  const result = page.getByRole("treeitem", { name: /^fc,/ });
+  await expect(result).toBeVisible();
+  await expect(result).toHaveAttribute("aria-selected", "true");
+  await expect(result).toBeFocused();
 });
 
 test("respects prefers-reduced-motion with no accessibility regressions", async ({

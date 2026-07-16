@@ -283,16 +283,26 @@ does not store separate database IDs.
 
 The main screen contains:
 
-- a breadcrumb for the current object or array;
-- its immediate children;
+- one continuous expandable tree rooted at `Notes`;
+- compact, indented rows that keep visible ancestors in the tree;
 - distinct presentation for objects, arrays, and scalars;
-- controls to create a scalar, object, or array;
+- independent expansion, selection, and keyboard focus;
+- inline controls to create or edit a scalar, object, or array;
 - full-text search; and
 - actions for rename, move, copy, and delete.
 
-Selecting a container drills into it. Selecting a scalar opens its value editor.
-Breadcrumb segments navigate to ancestors. A wide-screen tree sidebar is an
-optional enhancement; the mobile layout does not depend on it.
+Disclosure controls expand objects and arrays in place without changing
+selection. Selecting a container targets child creation; selecting a scalar
+makes its edit action available. Multiple branches may remain expanded at once.
+The tree uses the WAI-ARIA tree pattern and roving keyboard focus. Arrow keys,
+Home, End, Enter, and Space operate on the visible row sequence. The same tree
+is used on phones and desktop browsers, with larger coarse-pointer targets and
+horizontal scrolling for unusually deep paths.
+
+Expanded paths are remembered as device-local navigation metadata and validated
+against each loaded document. Selection, focus, and inline editor state remain
+in memory. Structural mutations reconcile path-keyed view state; when an array
+index mapping cannot safely be retained, the affected array is collapsed.
 
 Destructive actions require confirmation. Delete permanently removes content
 from the active tree; there is no trash or recovery.
@@ -446,8 +456,10 @@ active JSON document, the PWA walks the tree and builds an in-memory index over:
 - breadcrumb paths.
 
 Matching is case-insensitive and covers only the active document.
-Results show the matching key or excerpt and its breadcrumb and navigate to the
-containing level. The index is rebuilt after loading or modifying the tree.
+Results show the matching key or excerpt and its breadcrumb. Selecting a result
+returns to the tree, expands its complete ancestor chain, selects the exact
+matching node, scrolls it into view, and moves keyboard focus to it. The index
+is rebuilt after loading or modifying the tree.
 
 Search uses one plain-text query box. A result matches when its key, scalar
 value, or breadcrumb path contains the query, case-insensitively. Multiple query

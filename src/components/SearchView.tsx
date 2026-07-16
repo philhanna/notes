@@ -5,7 +5,9 @@ import type { JsonObject, Path } from "../domain/types.ts";
 
 interface SearchViewProps {
   document: JsonObject;
-  onNavigate: (path: Path) => void;
+  onSelectPath?: (path: Path) => void;
+  /** Compatibility callback for the former drill-down browser. */
+  onNavigate?: (path: Path) => void;
   onClose: () => void;
 }
 
@@ -16,13 +18,19 @@ interface SearchViewProps {
  * renders from. Selecting a result navigates to its containing level and
  * closes search, matching "navigate to the containing level" (design.md 11).
  */
-export function SearchView({ document, onNavigate, onClose }: SearchViewProps) {
+export function SearchView({
+  document,
+  onSelectPath,
+  onNavigate,
+  onClose,
+}: SearchViewProps) {
   const [query, setQuery] = useState("");
   const index = useMemo(() => buildSearchIndex(document), [document]);
   const results = useMemo(() => search(index, query), [index, query]);
 
   function handleSelect(result: SearchResult) {
-    onNavigate(result.containerPath);
+    if (onSelectPath) onSelectPath(result.path);
+    else onNavigate?.(result.containerPath);
     onClose();
   }
 

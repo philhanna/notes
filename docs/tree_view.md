@@ -2,8 +2,8 @@
 
 ## Status
 
-This document proposes a change to the PWA's tree browser. It is a design
-only; no implementation is included.
+Implemented in the PWA. This document remains the detailed interaction and
+acceptance record for the tree browser.
 
 ## Summary
 

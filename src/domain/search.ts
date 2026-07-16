@@ -26,7 +26,7 @@ export interface SearchResult {
   matchedIn: "key" | "value" | "breadcrumb";
 }
 
-/** A friendly, case-preserving breadcrumb string, matching Breadcrumbs.tsx's "Notes" root label. */
+/** A friendly, case-preserving breadcrumb string rooted at the tree's "Notes" label. */
 function breadcrumbFor(path: Path): string {
   return ["Notes", ...path.map(String)].join(" › ");
 }

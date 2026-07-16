@@ -17,6 +17,7 @@ interface CreateEntryFormProps {
   onCreateElement: (
     value: JsonValue,
   ) => Promise<Result<JsonObject, MutationError>>;
+  onCancel?: () => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export function CreateEntryForm({
   storageKey,
   onCreateEntry,
   onCreateElement,
+  onCancel,
 }: CreateEntryFormProps) {
   const key = useDraft(`create-key:${storageKey}`, "");
   const valueText = useDraft(`create-value:${storageKey}`, "");
@@ -84,6 +86,11 @@ export function CreateEntryForm({
       <button type="submit" disabled={saving}>
         {actionLabel}
       </button>
+      {onCancel && (
+        <button type="button" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+      )}
       {error && (
         <p className="child-row__error" role="alert">
           {error}
