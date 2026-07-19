@@ -48,10 +48,18 @@ describe("renderInline", () => {
     expect(result.html).not.toContain("<img");
   });
 
-  it("shows link text styled but not as a clickable anchor", () => {
+  it("renders an allowed-scheme link as a clickable anchor", () => {
     const result = renderInline("[click here](http://example.com)");
-    expect(result.html).toBe('<span class="md-inline-link">click here</span>');
+    expect(result.html).toBe(
+      '<a href="http://example.com" target="_blank" rel="noopener noreferrer" class="md-inline-link">click here</a>',
+    );
+    expect(result.plainText).toBe("click here");
+  });
+
+  it("falls back to plain text for a disallowed link scheme", () => {
+    const result = renderInline("[click here](javascript:alert(1))");
     expect(result.html).not.toContain("<a ");
+    expect(result.html).toBe("click here");
     expect(result.plainText).toBe("click here");
   });
 

@@ -360,6 +360,11 @@ export function TreeRow({
             <span
               className="tree-row__preview tree-row__preview--markdown"
               title={inlinePreview.plainText}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).tagName === "A") {
+                  event.stopPropagation();
+                }
+              }}
               dangerouslySetInnerHTML={{ __html: inlinePreview.html }}
             />
           </>

@@ -66,8 +66,8 @@ export function renderInline(source: string): InlineRender {
   const rendered = joinParts(tokens.map(flattenBlockToken), " ");
   return {
     html: DOMPurify.sanitize(rendered.html, {
-      ALLOWED_TAGS: ["strong", "em", "s", "code", "span"],
-      ALLOWED_ATTR: ["class"],
+      ALLOWED_TAGS: ["strong", "em", "s", "code", "span", "a"],
+      ALLOWED_ATTR: ["class", "href", "title", "target", "rel"],
     }),
     plainText: rendered.plainText,
   };
@@ -152,9 +152,16 @@ function renderInlineToken(token: Token): InlineRender {
       return { html: `<code>${escapeHtml(text)}</code>`, plainText: text };
     }
     case "link": {
-      const inner = renderInlineTokens((token as Tokens.Link).tokens);
+      const linkToken = token as Tokens.Link;
+      const inner = renderInlineTokens(linkToken.tokens);
+      if (!isAllowedUrl(linkToken.href)) {
+        return inner;
+      }
+      const titleAttr = linkToken.title
+        ? ` title="${escapeAttribute(linkToken.title)}"`
+        : "";
       return {
-        html: `<span class="md-inline-link">${inner.html}</span>`,
+        html: `<a href="${escapeAttribute(linkToken.href)}" target="_blank" rel="noopener noreferrer" class="md-inline-link"${titleAttr}>${inner.html}</a>`,
         plainText: inner.plainText,
       };
     }

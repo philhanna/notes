@@ -37,7 +37,7 @@ and non-string scalars unchanged.
   treated the same way (see Open Questions for the alternative).
 - No change to how numbers, booleans, or null render, and no change to how
   object keys render.
-- No live/clickable links or embedded images inside the compact row preview.
+- No embedded images inside the compact row preview (alt text only).
 - No change to search matching, which continues to operate on raw string
   content.
 
@@ -63,8 +63,10 @@ Replaces the `<code className="tree-row__preview">{JSON.stringify(node.value)}</
 branch in `TreeRow.tsx` for string nodes only.
 
 - Parse the string and keep only what can survive on one line: bold,
-  italic, strikethrough, and inline code. Link *text* is shown, styled, but
-  not as a clickable anchor (see Interactivity, below).
+  italic, strikethrough, and inline code. Links render as real, clickable
+  anchors (`target="_blank" rel="noopener noreferrer"`, restricted to the
+  same `http:`/`https:`/`mailto:` allowlist as the view panel); a
+  disallowed scheme falls back to plain link text.
 - Flatten everything block-level rather than trying to special-case it:
   - headings render as bold text, with the `#` markers stripped;
   - paragraph and line breaks collapse to a single space, consistent with
