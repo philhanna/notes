@@ -65,7 +65,9 @@ Conditionally advance refs/heads/main with force=false
 
 This matters because if the web app or another CLI writes first, GitHub
 rejects the stale branch update instead of silently overwriting the newer
-data.
+data. It is also important not to retry an uncertain branch update blindly:
+a timeout or GitHub `5xx` response can occur after GitHub has already advanced
+the branch. Read the branch head first to determine whether that commit landed.
 
 The app implements that sequence in [githubRepository.ts](/home/saspeh/dev/notes/src/persistence/githubRepository.ts:239). GitHub documents the underlying [blob](https://docs.github.com/en/rest/git/blobs), [tree](https://docs.github.com/en/rest/git/trees), [commit](https://docs.github.com/en/rest/git/commits), and [reference](https://docs.github.com/en/rest/git/refs) endpoints.
 
@@ -77,7 +79,9 @@ Install the HTTP dependency:
 python -m pip install requests
 ```
 
-This example reads `remember.json`, runs your edit function, and commits the result with stale-write protection:
+This example reads `remember.json`, runs your edit function, and commits the
+result with stale-write protection. It also resolves an uncertain ref update
+before reporting whether it is safe to retry:
 
 ```python
 import base64
@@ -99,6 +103,14 @@ HEADERS = {
 }
 
 
+class SaveConflict(RuntimeError):
+    """The branch changed after the document was read."""
+
+
+class SaveOutcomeUnknown(RuntimeError):
+    """The branch head could not be checked after an uncertain update."""
+
+
 def api(method, path, **kwargs):
     response = requests.request(
         method,
@@ -108,18 +120,17 @@ def api(method, path, **kwargs):
         **kwargs,
     )
 
-    if response.status_code == 422:
-        raise RuntimeError(
-            "Save conflict: the repository changed. Reload and retry."
-        )
-
     response.raise_for_status()
     return response.json() if response.content else None
 
 
-def load_notes():
+def get_head():
     ref = api("GET", f"/git/ref/heads/{BRANCH}")
-    base_commit = ref["object"]["sha"]
+    return ref["object"]["sha"]
+
+
+def load_notes():
+    base_commit = get_head()
 
     commit = api("GET", f"/git/commits/{base_commit}")
     base_tree = commit["tree"]["sha"]
@@ -174,16 +185,46 @@ def save_notes(notes, base_commit, base_tree, message):
         },
     )
 
-    api(
-        "PATCH",
-        f"/git/refs/heads/{BRANCH}",
-        json={
-            "sha": commit["sha"],
-            "force": False,
-        },
-    )
+    try:
+        api(
+            "PATCH",
+            f"/git/refs/heads/{BRANCH}",
+            json={
+                "sha": commit["sha"],
+                "force": False,
+            },
+        )
+    except requests.HTTPError as error:
+        if error.response.status_code in {409, 422}:
+            raise SaveConflict(
+                "The repository changed. Reload and reapply the edit."
+            ) from error
+        if error.response.status_code < 500:
+            raise
+        uncertain_error = error
+    except (requests.ConnectionError, requests.Timeout) as error:
+        uncertain_error = error
+    else:
+        return commit["sha"]
 
-    return commit["sha"]
+    # The PATCH may have succeeded before its response was lost. Resolve that
+    # uncertainty before retrying, or the same edit could be committed twice.
+    try:
+        head_after = get_head()
+    except requests.RequestException as check_error:
+        raise SaveOutcomeUnknown(
+            "The ref update may have landed; check the branch before retrying."
+        ) from check_error
+
+    if head_after == commit["sha"]:
+        return commit["sha"]
+    if head_after == base_commit:
+        raise requests.RetryError(
+            "The ref update did not land; retrying this edit is safe."
+        ) from uncertain_error
+    raise SaveConflict(
+        "Another writer advanced the branch. Reload and reapply the edit."
+    ) from uncertain_error
 
 
 notes, base_commit, base_tree = load_notes()
@@ -214,6 +255,11 @@ A Python client should preserve these app invariants:
 - Avoid note values in commit messages because messages appear in the Git log.
 - Never use `force: true` when updating the branch.
 - On HTTP `409` or `422`, reload the current state and reapply the intended operation.
+- After a timeout, connection failure, or HTTP `5xx` from the ref update, read
+  the branch head before retrying. If it equals the new commit, the save
+  succeeded; if it equals the old commit, retrying is safe; any other commit
+  is a conflict. If the head cannot be read, leave the outcome unknown and do
+  not retry automatically.
 - Deletes are permanent: just remove the key from `remember.json`. There is no trash or recovery file to keep in sync.
 
 The browser’s authentication relay is unnecessary for a Python CLI using a PAT. It exists only because browsers enforce CORS restrictions on GitHub’s device-flow endpoints; normal Python HTTP requests do not have that restriction. If desired, the CLI could instead implement the same GitHub App device flow and obtain its own app user token, but PAT authentication is substantially simpler for a personal CLI.
