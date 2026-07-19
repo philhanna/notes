@@ -42,7 +42,7 @@ describe("TreeBrowser", () => {
     expect(row(/^tips, object, 1 children/)).toBeInTheDocument();
     expect(screen.getByText("{1}")).toBeInTheDocument();
     expect(screen.getByText("[3]")).toBeInTheDocument();
-    expect(screen.getByText('"system info"')).toBeInTheDocument();
+    expect(screen.getByText("system info")).toBeInTheDocument();
   });
 
   it("expands multiple branches in place and keeps their parents visible", async () => {
@@ -243,5 +243,60 @@ describe("TreeBrowser", () => {
     await openActions(user, tips, "tips");
     expect(within(tips).getByRole("button", { name: "Edit" })).toBeDisabled();
     expect(screen.getAllByLabelText("Value")).toHaveLength(1);
+  });
+
+  it("selecting a string row opens the read-only rendered view panel", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await user.click(within(hardinfo).getByText("hardinfo"));
+
+    expect(
+      within(hardinfo).getByText("system info", { selector: "p" }),
+    ).toBeInTheDocument();
+    expect(within(hardinfo).queryByLabelText("Value")).not.toBeInTheDocument();
+  });
+
+  it("switches from the rendered view to the raw ValueEditor via Edit", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await user.click(within(hardinfo).getByText("hardinfo"));
+    const viewPanel = hardinfo.querySelector(".tree-row__view") as HTMLElement;
+    await user.click(within(viewPanel).getByRole("button", { name: "Edit" }));
+
+    expect(within(hardinfo).getByLabelText("Value")).toHaveValue(
+      '"system info"',
+    );
+    expect(
+      within(hardinfo).queryByText("system info", { selector: "p" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("closes a string's view panel when selection moves to another row", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await user.click(within(hardinfo).getByText("hardinfo"));
+    expect(
+      within(hardinfo).getByText("system info", { selector: "p" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(row(/^tips,/)).getByText("tips"));
+    expect(
+      within(hardinfo).queryByText("system info", { selector: "p" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not open a panel when selecting a number, boolean, or null row", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Expand list" }));
+    const first = row(/^\[0\],/);
+    await user.click(within(first).getByRole("code"));
+
+    expect(first).toHaveAttribute("aria-selected", "true");
+    expect(within(first).queryByLabelText("Value")).not.toBeInTheDocument();
+    expect(first.querySelector(".tree-row__view")).not.toBeInTheDocument();
   });
 });

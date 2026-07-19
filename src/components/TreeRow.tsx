@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   DragEvent,
@@ -10,6 +10,7 @@ import type { MutationError } from "../app/useDocument.ts";
 import type { VisibleTreeNode } from "../app/treeViewState.ts";
 import { pathsEqual } from "../app/treeViewState.ts";
 import { encodePointer, isPathWithinOrEqual } from "../domain/path.ts";
+import { renderBlock, renderInline } from "../domain/markdown.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
@@ -18,6 +19,7 @@ import { describeError } from "./errors.ts";
 import { ValueEditor } from "./ValueEditor.tsx";
 
 export type RowEditor =
+  | { mode: "view"; path: Path }
   | { mode: "edit-value"; path: Path }
   | { mode: "rename"; path: Path }
   | { mode: "relocate"; path: Path; kind: "move" | "copy" }
@@ -116,6 +118,17 @@ export function TreeRow({
   const actionsRef = useRef<HTMLDetailsElement>(null);
   const isEditing =
     editing !== null && encodePointer(editing.path) === node.pointer;
+  const isViewing = isEditing && editing.mode === "view";
+  const inlinePreview = useMemo(() => {
+    if (typeof node.value !== "string" || node.value.trim() === "") {
+      return null;
+    }
+    return renderInline(node.value);
+  }, [node.value]);
+  const blockHtml = useMemo(() => {
+    if (!isViewing || typeof node.value !== "string") return null;
+    return renderBlock(node.value);
+  }, [isViewing, node.value]);
   const parentPath = node.path.slice(0, -1);
   const oldKey =
     node.path.length === 0 ? "" : String(node.path[node.path.length - 1]);
@@ -341,6 +354,15 @@ export function TreeRow({
         </span>
         {node.container ? (
           <span className="tree-row__count">{countLabel}</span>
+        ) : inlinePreview ? (
+          <>
+            <span className="tree-row__separator">:</span>
+            <span
+              className="tree-row__preview tree-row__preview--markdown"
+              title={inlinePreview.plainText}
+              dangerouslySetInnerHTML={{ __html: inlinePreview.html }}
+            />
+          </>
         ) : (
           <>
             <span className="tree-row__separator">:</span>
@@ -387,7 +409,10 @@ export function TreeRow({
           >
             ⋯
           </summary>
-          <div className="tree-row__actions-menu">
+          <div
+            className="tree-row__actions-menu"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               onClick={() =>
@@ -481,6 +506,25 @@ export function TreeRow({
           </div>
         </details>
       </div>
+
+      {isViewing && blockHtml !== null && (
+        <div className="tree-row__panel tree-row__view">
+          <div
+            className="tree-row__view-content"
+            dangerouslySetInnerHTML={{ __html: blockHtml }}
+          />
+          <div className="tree-row__form-actions">
+            <button
+              type="button"
+              onClick={() =>
+                openEditor({ mode: "edit-value", path: node.path })
+              }
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+      )}
 
       {isEditing && editing.mode === "edit-value" && (
         <div className="tree-row__panel">

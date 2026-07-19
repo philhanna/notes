@@ -127,6 +127,15 @@ export function TreeBrowser({
     }
   }, [visibleNodes, focusedPath, focusedPointer, setFocusedPath]);
 
+  function selectNode(node: VisibleTreeNode) {
+    setSelectedPath(node.path);
+    if (node.kind === "string") {
+      setEditing({ mode: "view", path: node.path });
+    } else {
+      setEditing((current) => (current?.mode === "view" ? null : current));
+    }
+  }
+
   function focusPath(path: Path) {
     setFocusedPath(path);
     const row = rowRefs.current.get(encodePointer(path));
@@ -177,7 +186,7 @@ export function TreeBrowser({
       if (node.container && node.expanded) toggle(node.path);
       else target = node.parentPath;
     } else if (event.key === "Enter" || event.key === " ") {
-      setSelectedPath(node.path);
+      selectNode(node);
     } else {
       return;
     }
@@ -323,7 +332,7 @@ export function TreeBrowser({
           else rowRefs.current.delete(pointer);
         }}
         onFocus={setFocusedPath}
-        onSelect={setSelectedPath}
+        onSelect={() => selectNode(node)}
         onToggle={toggle}
         onKeyDown={handleKeyDown}
         onEdit={(next) => {

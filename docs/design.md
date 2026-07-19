@@ -292,12 +292,25 @@ The main screen contains:
 - actions for rename, move, copy, and delete.
 
 Disclosure controls expand objects and arrays in place without changing
-selection. Selecting a container targets child creation; selecting a scalar
-makes its edit action available. Multiple branches may remain expanded at once.
-The tree uses the WAI-ARIA tree pattern and roving keyboard focus. Arrow keys,
-Home, End, Enter, and Space operate on the visible row sequence. The same tree
-is used on phones and desktop browsers, with larger coarse-pointer targets and
-horizontal scrolling for unusually deep paths.
+selection. Selecting a container targets child creation. Selecting a string
+scalar opens a read-only rendered Markdown view of its value in the row's
+panel; an explicit `Edit` action switches that panel to the raw-text editor.
+Selecting a number, boolean, or null scalar leaves `Edit` as the direct
+primary action, since there is nothing to render for those kinds. Multiple
+branches may remain expanded at once. The tree uses the WAI-ARIA tree pattern
+and roving keyboard focus. Arrow keys, Home, End, Enter, and Space operate on
+the visible row sequence. The same tree is used on phones and desktop
+browsers, with larger coarse-pointer targets and horizontal scrolling for
+unusually deep paths.
+
+Every string scalar's row preview and rendered view are Markdown: the closed
+row shows a one-line, inline-only rendering (bold, italic, strikethrough,
+inline code; links show their text but are not clickable; block constructs
+flatten onto the line), while the row's panel shows full CommonMark
+(headings, lists, blockquotes, code blocks, and real links restricted to
+`http:`, `https:`, and `mailto:` targets). Raw HTML embedded in a string is
+always treated as literal text, never executed. See `src/domain/markdown.ts`
+for the parsing and sanitizing policy.
 
 Expanded paths are remembered as device-local navigation metadata and validated
 against each loaded document. Selection, focus, and inline editor state remain

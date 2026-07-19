@@ -2,8 +2,11 @@
 
 ## Status
 
-Proposed. Not implemented. This document exists to reach agreement on scope
-and interaction before any code changes.
+Implemented. Resolved open questions: `marked` as the CommonMark library;
+blanket treatment (every string is Markdown); selecting a string opens the
+rendered view by default; the view panel supports plain CommonMark only (no
+GFM tables, task lists, strikethrough, or autolinks). See `src/domain/markdown.ts`,
+`src/components/TreeRow.tsx`, and `src/components/TreeBrowser.tsx`.
 
 ## Summary
 
