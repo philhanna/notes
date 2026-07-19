@@ -1,7 +1,14 @@
 import { useRef, useState } from "react";
-import type { CSSProperties, FormEvent, KeyboardEvent, ReactNode } from "react";
+import type {
+  CSSProperties,
+  DragEvent,
+  FormEvent,
+  KeyboardEvent,
+  ReactNode,
+} from "react";
 import type { MutationError } from "../app/useDocument.ts";
 import type { VisibleTreeNode } from "../app/treeViewState.ts";
+import { pathsEqual } from "../app/treeViewState.ts";
 import { encodePointer, isPathWithinOrEqual } from "../domain/path.ts";
 import type { Result } from "../domain/result.ts";
 import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
@@ -63,6 +70,9 @@ interface TreeRowProps {
     fromIndex: number,
     toIndex: number,
   ) => Promise<Result<JsonObject, MutationError>>;
+  draggedPath: Path | null;
+  onDragStart: (path: Path) => void;
+  onDragEnd: () => void;
   onRelocate: (
     kind: "move" | "copy",
     path: Path,
@@ -92,11 +102,17 @@ export function TreeRow({
   onReorder,
   onRelocate,
   onDelete,
+  draggedPath,
+  onDragStart,
+  onDragEnd,
 }: TreeRowProps) {
   const [error, setError] = useState<string | null>(null);
   const [pendingValue, setPendingValue] = useState<JsonValue | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(
+    null,
+  );
   const actionsRef = useRef<HTMLDetailsElement>(null);
   const isEditing =
     editing !== null && encodePointer(editing.path) === node.pointer;
@@ -174,6 +190,54 @@ export function TreeRow({
     if (!result.ok) setError(describeError(result.error));
   }
 
+  const isDragSource =
+    draggedPath !== null && pathsEqual(draggedPath, node.path);
+  const draggedParentPath =
+    draggedPath !== null ? draggedPath.slice(0, -1) : null;
+  const canDropHere =
+    node.index !== null &&
+    !isDragSource &&
+    draggedParentPath !== null &&
+    pathsEqual(draggedParentPath, parentPath);
+
+  function handleDragStart(event: DragEvent<HTMLSpanElement>) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", node.pointer);
+    onDragStart(node.path);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!canDropHere) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDropPosition(
+      event.clientY - rect.top < rect.height / 2 ? "before" : "after",
+    );
+  }
+
+  function handleDragLeave() {
+    setDropPosition(null);
+  }
+
+  async function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const position = dropPosition;
+    setDropPosition(null);
+    if (!canDropHere || draggedPath === null || node.index === null) return;
+    const fromIndex = draggedPath[draggedPath.length - 1];
+    if (typeof fromIndex !== "number") return;
+    const adjustedTargetIndex =
+      node.index > fromIndex ? node.index - 1 : node.index;
+    const toIndex =
+      position === "after" ? adjustedTargetIndex + 1 : adjustedTargetIndex;
+    if (toIndex === fromIndex) return;
+    setSaving(true);
+    const result = await onReorder(parentPath, fromIndex, toIndex);
+    setSaving(false);
+    if (!result.ok) setError(describeError(result.error));
+  }
+
   async function handleRelocate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isEditing || editing.mode !== "relocate") return;
@@ -212,7 +276,7 @@ export function TreeRow({
     <li
       ref={(element) => registerRef(node.pointer, element)}
       id={`tree-node-${encodeURIComponent(node.pointer || "root")}`}
-      className={`tree-row${selected ? " tree-row--selected" : ""}`}
+      className={`tree-row${selected ? " tree-row--selected" : ""}${isDragSource ? " tree-row--dragging" : ""}`}
       role="treeitem"
       aria-level={node.depth + 1}
       aria-expanded={node.container ? node.expanded : undefined}
@@ -228,7 +292,29 @@ export function TreeRow({
       }}
       onKeyDown={(event) => onKeyDown(event, node)}
     >
-      <div className="tree-row__line" onClick={() => onSelect(node.path)}>
+      <div
+        className={`tree-row__line${
+          canDropHere && dropPosition
+            ? ` tree-row__line--drop-${dropPosition}`
+            : ""
+        }`}
+        onClick={() => onSelect(node.path)}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(event) => void handleDrop(event)}
+      >
+        <span
+          className={`tree-row__drag-handle${
+            node.index === null ? " tree-row__drag-handle--inactive" : ""
+          }`}
+          aria-hidden="true"
+          draggable={node.index !== null}
+          onDragStart={node.index !== null ? handleDragStart : undefined}
+          onDragEnd={node.index !== null ? onDragEnd : undefined}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {node.index !== null ? "⠿" : ""}
+        </span>
         {node.container ? (
           <button
             type="button"

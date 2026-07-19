@@ -332,9 +332,10 @@ code,
 }
 
 .tree-row__line {
+  position: relative;
   display: grid;
   grid-template-columns:
-    1.5rem 1.8rem minmax(4rem, auto) auto auto minmax(2rem, 1fr)
+    1.1rem 1.5rem 1.8rem minmax(4rem, auto) auto auto minmax(2rem, 1fr)
     auto auto;
   align-items: center;
   min-height: 2rem;
@@ -345,6 +346,48 @@ code,
 
 .tree-row__line:hover {
   background-color: rgb(220 235 197 / 55%);
+}
+
+.tree-row__line--drop-before::before,
+.tree-row__line--drop-after::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--green-700);
+  content: "";
+}
+
+.tree-row__line--drop-before::before {
+  top: 0;
+}
+
+.tree-row__line--drop-after::after {
+  bottom: 0;
+}
+
+.tree-row--dragging > .tree-row__line {
+  opacity: 0.4;
+}
+
+.tree-row__drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  color: var(--tan-700);
+  cursor: grab;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.tree-row__drag-handle--inactive {
+  cursor: default;
+}
+
+.tree-row__drag-handle:active {
+  cursor: grabbing;
 }
 
 .tree-row__disclosure,

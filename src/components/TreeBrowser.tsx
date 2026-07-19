@@ -57,6 +57,7 @@ export function TreeBrowser({
   const [localSelected, setLocalSelected] = useState<Path>([]);
   const [localFocused, setLocalFocused] = useState<Path>([]);
   const [editing, setEditing] = useState<RowEditor | null>(null);
+  const [draggedPath, setDraggedPath] = useState<Path | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
 
   const expandedPaths = treeState?.expandedPaths ?? localExpanded;
@@ -336,6 +337,9 @@ export function TreeBrowser({
         onReorder={reorder}
         onRelocate={relocate}
         onDelete={deleteEntry}
+        draggedPath={draggedPath}
+        onDragStart={setDraggedPath}
+        onDragEnd={() => setDraggedPath(null)}
       >
         {children.length > 0 && (
           <ul role="group" className="tree-group">
