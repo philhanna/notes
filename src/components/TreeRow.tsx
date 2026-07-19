@@ -527,6 +527,9 @@ export function TreeRow({
             >
               Edit
             </button>
+            <button type="button" onClick={resetEditor}>
+              Cancel
+            </button>
           </div>
         </div>
       )}

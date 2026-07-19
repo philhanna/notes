@@ -273,6 +273,21 @@ describe("TreeBrowser", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("dismisses the rendered view panel via Cancel without editing", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await user.click(within(hardinfo).getByText("hardinfo"));
+    const viewPanel = hardinfo.querySelector(".tree-row__view") as HTMLElement;
+    await user.click(within(viewPanel).getByRole("button", { name: "Cancel" }));
+
+    expect(
+      within(hardinfo).queryByText("system info", { selector: "p" }),
+    ).not.toBeInTheDocument();
+    expect(within(hardinfo).queryByLabelText("Value")).not.toBeInTheDocument();
+    expect(hardinfo).toHaveAttribute("aria-selected", "true");
+  });
+
   it("closes a string's view panel when selection moves to another row", async () => {
     const user = userEvent.setup();
     render(<Harness />);

@@ -170,7 +170,8 @@ the tree scrolls to and displays it, not how matching works.
   of `JSON.stringify`; number/boolean/null nodes are unchanged. Add a
   `"view"` mode to the `RowEditor` union (or equivalent), rendered as a new
   `tree-row__panel` branch, with its own `Edit` control that swaps to
-  `"edit-value"` in place.
+  `"edit-value"` in place, and a `Cancel` control that closes the panel
+  without entering edit mode.
 - `index.css`: styling for headings/lists/code/tables inside the view
   panel, inline emphasis styling for the row preview, and a `max-width`
   rule for panel images.
