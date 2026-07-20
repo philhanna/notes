@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TreeBrowser } from "./TreeBrowser.tsx";
@@ -31,6 +31,14 @@ async function openActions(
 }
 
 describe("TreeBrowser", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // @ts-expect-error jsdom doesn't implement these; undo the test-only stub.
+    delete URL.createObjectURL;
+    // @ts-expect-error same as above.
+    delete URL.revokeObjectURL;
+  });
+
   it("renders a compact ARIA tree with root, scalar previews, and child counts", () => {
     render(<Harness />);
 
@@ -313,5 +321,30 @@ describe("TreeBrowser", () => {
     expect(first).toHaveAttribute("aria-selected", "true");
     expect(within(first).queryByLabelText("Value")).not.toBeInTheDocument();
     expect(first.querySelector(".tree-row__view")).not.toBeInTheDocument();
+  });
+
+  it("downloads just that row's subtree as JSON via the row's Export action", async () => {
+    const createObjectURL = vi.fn().mockReturnValue("blob:fake-url");
+    const revokeObjectURL = vi.fn();
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    render(<Harness />);
+    const tips = row(/^tips,/);
+    await openActions(user, tips, "tips");
+    await user.click(within(tips).getByRole("button", { name: "Export" }));
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    expect(blob.type).toBe("application/json");
+    const expected =
+      JSON.stringify({ bash: { fc: "recent history" } }, null, 2) + "\n";
+    expect(blob.size).toBe(new TextEncoder().encode(expected).length);
+    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake-url");
   });
 });

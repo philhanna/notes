@@ -1,5 +1,5 @@
-import { serializeDocument } from "../domain/serialize.ts";
-import type { JsonObject } from "../domain/types.ts";
+import { serializeDocument, serializeValue } from "../domain/serialize.ts";
+import type { JsonObject, JsonValue } from "../domain/types.ts";
 
 export interface DocumentExport {
   filename: string;
@@ -23,6 +23,32 @@ export function exportDocument(
     content: serializeDocument(document),
     mimeType: "application/json",
   };
+}
+
+/**
+ * Same document-only guarantee as {@link exportDocument} (design.md 10, 12),
+ * scoped to a single tree row: given only that node's own value and label,
+ * so nothing outside the exported subtree can end up in the file.
+ */
+export function exportNode(
+  value: JsonValue,
+  label: string,
+  now: Date = new Date(),
+): DocumentExport {
+  return {
+    filename: `${slugify(label)}-${isoDateStamp(now)}.json`,
+    content: serializeValue(value),
+    mimeType: "application/json",
+  };
+}
+
+function slugify(label: string): string {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug === "" ? "node" : slug;
 }
 
 function isoDateStamp(date: Date): string {

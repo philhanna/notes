@@ -6,6 +6,8 @@ import type {
   KeyboardEvent,
   ReactNode,
 } from "react";
+import { downloadExport } from "../app/downloadExport.ts";
+import { exportNode } from "../app/exportDocument.ts";
 import type { MutationError } from "../app/useDocument.ts";
 import type { VisibleTreeNode } from "../app/treeViewState.ts";
 import { pathsEqual } from "../app/treeViewState.ts";
@@ -279,6 +281,11 @@ export function TreeRow({
     if (!result.ok) setError(describeError(result.error));
   }
 
+  function handleExportNode() {
+    closeActions();
+    downloadExport(exportNode(node.value, node.label));
+  }
+
   const countLabel =
     node.kind === "array" ? `[${node.childCount}]` : `{${node.childCount}}`;
   const description = `${node.label}, ${node.kind}${
@@ -426,6 +433,9 @@ export function TreeRow({
               disabled={saving || (editing !== null && !isEditing)}
             >
               Edit
+            </button>
+            <button type="button" onClick={handleExportNode} disabled={saving}>
+              Export
             </button>
             {node.container && (
               <button

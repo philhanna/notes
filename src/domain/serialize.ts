@@ -16,7 +16,12 @@ export type ParseError =
  * order are whatever the document already holds.
  */
 export function serializeDocument(document: JsonObject): string {
-  return JSON.stringify(document, null, 2) + "\n";
+  return serializeValue(document);
+}
+
+/** Same deterministic formatting as {@link serializeDocument}, for values that aren't necessarily the document root (e.g. a single tree node). */
+export function serializeValue(value: JsonValue): string {
+  return JSON.stringify(value, null, 2) + "\n";
 }
 
 /** Parses and validates document text, per validateDocument. */

@@ -1,3 +1,4 @@
+import { downloadExport } from "../app/downloadExport.ts";
 import { exportDocument } from "../app/exportDocument.ts";
 import type { JsonObject } from "../domain/types.ts";
 
@@ -13,14 +14,7 @@ interface ExportButtonProps {
  */
 export function ExportButton({ document: activeDocument }: ExportButtonProps) {
   function handleExport() {
-    const { filename, content, mimeType } = exportDocument(activeDocument);
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadExport(exportDocument(activeDocument));
   }
 
   return (
