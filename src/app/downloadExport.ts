@@ -11,6 +11,10 @@ export function downloadExport({
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+  // Mobile browsers (e.g. iOS Safari) read the blob asynchronously, so
+  // revoking immediately can race the download and drop the content.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
