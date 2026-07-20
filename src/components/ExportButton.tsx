@@ -14,7 +14,9 @@ interface ExportButtonProps {
  */
 export function ExportButton({ document: activeDocument }: ExportButtonProps) {
   function handleExport() {
-    downloadExport(exportDocument(activeDocument));
+    downloadExport(exportDocument(activeDocument)).catch((error: unknown) => {
+      console.error("Export failed", error);
+    });
   }
 
   return (

@@ -283,7 +283,11 @@ export function TreeRow({
 
   function handleExportNode() {
     closeActions();
-    downloadExport(exportNode(node.value, node.label));
+    downloadExport(exportNode(node.value, node.label)).catch(
+      (error: unknown) => {
+        console.error("Export failed", error);
+      },
+    );
   }
 
   const countLabel =
