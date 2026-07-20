@@ -13,7 +13,6 @@ import {
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
-import { ExportButton } from "./ExportButton.tsx";
 import { SearchView } from "./SearchView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
@@ -230,7 +229,6 @@ function ReadyApp({
             Search
           </button>
         )}
-        <ExportButton document={documentState.document} />
       </nav>
     </>
   );
