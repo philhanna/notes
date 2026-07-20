@@ -197,10 +197,6 @@ code,
   backdrop-filter: blur(0.5rem);
 }
 
-.export-button {
-  display: none;
-}
-
 .skip-link {
   position: absolute;
   top: -4rem;
@@ -501,7 +497,10 @@ code,
 
 .tree-row__actions-menu {
   position: absolute;
-  z-index: 4;
+  /* Above .app-actions (z-index: 5): on short mobile viewports the fixed
+     bottom bar can otherwise sit on top of a menu opened near the bottom of
+     the visible tree, covering it and swallowing taps on its buttons. */
+  z-index: 6;
   top: calc(100% + 0.2rem);
   right: 0;
   display: grid;
