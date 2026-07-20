@@ -13,88 +13,40 @@ The live app is deployed at **<https://philhanna.github.io/notes/>**.
 
 ## 1. Downloading and installing
 
-There are two very different things "installing" can mean here — pick the
-one you actually want:
-
-### Option A — just use the app (no download needed)
+### Just use the app (no download needed)
 
 Open **<https://philhanna.github.io/notes/>** in any modern browser and sign
 in with GitHub. That's it — nothing to download or build. See section 2 for
 how to also put an icon on your phone's home screen.
 
-### Option B — get the source code (for development)
-
-You only need this if you want to change the code, run it on your own
-machine, or run its automated tests.
-
-Prerequisites:
-
-- **Git** — to download (`clone`) the source code.
-- **Node.js** version 20 or newer, which includes **npm** (Node's package
-  manager). Check what you have with `node --version` and `npm --version`.
-
-Then, in a terminal:
-
-```bash
-git clone https://github.com/philhanna/notes.git
-cd notes
-npm install
-```
-
-`npm install` reads `package.json` (see section 3) and downloads every
-library the app depends on into a `node_modules/` folder. This can take a
-minute the first time; you only need to re-run it when `package.json`
-changes.
-
 ---
 
 ## 2. Running the app
 
-### a. From a bash CLI
+### a. From a web browser
 
-From inside the `notes` folder (after `npm install`, per Option B above):
+**First time only:** create a private GitHub repository to hold your notes
+(any owner/name you like), then install the GitHub App on it at
+**<https://github.com/apps/notes-app-dev-philhanna>** — click **Install**,
+choose **Only select repositories**, and pick the repository you just
+created. This is a separate step from signing in below: signing in proves
+who you are, but only installing the app grants it access to that specific
+repository.
 
-```bash
-npm run dev
-```
+Then open the hosted app, **<https://philhanna.github.io/notes/>**
 
-This starts a local development web server on your machine and prints a URL,
-typically `http://localhost:5173/notes/`. Open that URL in a browser (see
-2b). Leave the command running in the terminal — press `Ctrl+C` there to
-stop it.
-
-Other useful commands from the same folder:
-
-```bash
-npm run build      # produces an optimized, deployable copy in dist/
-npm run preview    # serves that dist/ build locally, closer to production
-npm test           # runs the automated unit/component tests
-npm run e2e        # runs the automated real-browser (Playwright) tests
-```
-
-There is no separate command-line version of the app itself — it is a
-browser application, so "running from bash" always means starting a local
-web server (as above) and then opening it in a browser.
-
-### b. From a web browser
-
-Open either:
-
-- the hosted app, **<https://philhanna.github.io/notes/>**, or
-- your own local dev server's URL from `npm run dev` above.
-
-Either way you'll see a sign-in screen. Click **Sign in with GitHub**, then
+You'll see a sign-in screen. Click **Sign in with GitHub**, then
 follow the on-screen device code: it opens a GitHub page (or gives you a URL
 and a short code to enter) where you approve the app. Once approved, the app
 loads your connected notes repository. The first time, it will ask you to
 enter the owner/name of the private GitHub repository to use as storage
-(see `docs/design.md` section 9.1) — this must be a private repository that
-the "notes" GitHub App has been installed on.
+(see `docs/design.md` section 9.1) — this must be the private repository you
+installed the GitHub App on above.
 
-### c. From an Android phone
+### b. From a phone
 
 1. Open Chrome and go to **<https://philhanna.github.io/notes/>**.
-2. Sign in as in 2b.
+2. Sign in as in 2a.
 3. Open Chrome's menu (⋮) and choose **Add to Home screen** / **Install
    app** (Chrome may also show this as a banner automatically).
 4. An icon named "Notes" appears on your home screen. Opening it launches
