@@ -25,6 +25,7 @@ describe("ExportButton", () => {
     const clickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
     render(<ExportButton document={document} />);
     await user.click(screen.getByRole("button", { name: "Export JSON" }));
@@ -37,6 +38,15 @@ describe("ExportButton", () => {
     );
 
     expect(clickSpy).toHaveBeenCalledOnce();
+    // The URL is kept alive briefly so slower mobile browsers can finish
+    // reading the blob before it's revoked, rather than being revoked
+    // synchronously right after the click.
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    const [revoke, delay] = setTimeoutSpy.mock.calls.find(
+      ([, ms]) => ms === 30000,
+    )!;
+    (revoke as () => void)();
+    expect(delay).toBe(30000);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake-url");
   });
 });
