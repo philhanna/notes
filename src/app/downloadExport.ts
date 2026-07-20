@@ -14,7 +14,7 @@ export function downloadExport({
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
-  // Mobile browsers (e.g. iOS Safari) read the blob asynchronously, so
-  // revoking immediately can race the download and drop the content.
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  // Not revoked: mobile browsers (e.g. iOS Safari) read the blob
+  // asynchronously, and there's no signal for when that finishes. The
+  // browser releases the URL itself when this document is torn down.
 }
