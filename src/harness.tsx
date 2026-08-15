@@ -2,6 +2,7 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useDocument } from "./app/useDocument.ts";
 import { createInMemoryRepository } from "./persistence/inMemoryRepository.ts";
+import { SearchIcon } from "./components/icons.tsx";
 import { SearchView } from "./components/SearchView.tsx";
 import { TreeBrowser } from "./components/TreeBrowser.tsx";
 import type { Path } from "./domain/types.ts";
@@ -79,8 +80,14 @@ export function Harness() {
         )}
         <nav className="app-actions" aria-label="Note actions">
           {view !== "search" && (
-            <button type="button" onClick={() => setView("search")}>
-              Search
+            <button
+              type="button"
+              className="app-actions__button"
+              title="Search"
+              onClick={() => setView("search")}
+            >
+              <SearchIcon />
+              <span className="visually-hidden">Search</span>
             </button>
           )}
         </nav>

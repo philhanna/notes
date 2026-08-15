@@ -54,7 +54,7 @@ main {
   max-width: 48rem;
   min-height: calc(100vh - 0.35rem);
   margin: 0 auto;
-  padding: 1.5rem 1rem 9rem;
+  padding: 1.5rem 1rem 2rem;
 }
 
 .app-header {
@@ -62,6 +62,7 @@ main {
   align-items: center;
   gap: 0.75rem;
   padding-bottom: 1rem;
+  padding-right: 6.5rem;
   border-bottom: 2px solid var(--tan-200);
   margin-bottom: 1.25rem;
 }
@@ -178,23 +179,24 @@ code,
 
 .app-actions {
   position: fixed;
-  z-index: 5;
+  z-index: 7;
+  top: calc(0.75rem + env(safe-area-inset-top));
   right: 1rem;
-  bottom: 0;
-  left: 1rem;
   display: flex;
-  flex-wrap: wrap;
   gap: 0.5rem;
-  width: calc(100% - 2rem);
-  max-width: 46rem;
-  padding: 0.65rem 0.65rem calc(0.65rem + env(safe-area-inset-bottom));
-  border: 1px solid var(--tan-200);
-  border-bottom: 0;
-  border-radius: 0.65rem 0.65rem 0 0;
-  margin: 0 auto;
+}
+
+.app-actions__button {
+  display: grid;
+  width: 2.75rem;
+  min-width: 0;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: 50%;
   background: rgb(251 245 231 / 96%);
-  box-shadow: 0 -0.25rem 1rem rgb(103 73 31 / 15%);
+  box-shadow: 0 0.15rem 0.6rem rgb(103 73 31 / 15%);
   backdrop-filter: blur(0.5rem);
+  place-items: center;
 }
 
 .skip-link {

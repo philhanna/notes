@@ -13,6 +13,7 @@ import {
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
+import { SearchIcon, SignOutIcon } from "./icons.tsx";
 import { SearchView } from "./SearchView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
@@ -221,14 +222,26 @@ function ReadyApp({
         />
       )}
       <nav className="app-actions" aria-label="Note actions">
-        <button type="button" onClick={signOut}>
-          Sign out
-        </button>
         {view !== "search" && (
-          <button type="button" onClick={() => setView("search")}>
-            Search
+          <button
+            type="button"
+            className="app-actions__button"
+            title="Search"
+            onClick={() => setView("search")}
+          >
+            <SearchIcon />
+            <span className="visually-hidden">Search</span>
           </button>
         )}
+        <button
+          type="button"
+          className="app-actions__button"
+          title="Sign out"
+          onClick={signOut}
+        >
+          <SignOutIcon />
+          <span className="visually-hidden">Sign out</span>
+        </button>
       </nav>
     </>
   );
