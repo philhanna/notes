@@ -18,6 +18,7 @@ import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { CreateEntryForm } from "./CreateEntryForm.tsx";
 import { describeError } from "./errors.ts";
+import { ChevronIcon } from "./icons.tsx";
 import { ValueEditor } from "./ValueEditor.tsx";
 
 export type RowEditor =
@@ -350,7 +351,7 @@ export function TreeRow({
               onToggle(node.path);
             }}
           >
-            {node.expanded ? "▾" : "▸"}
+            <ChevronIcon expanded={node.expanded} />
           </button>
         ) : (
           <span className="tree-row__disclosure tree-row__disclosure--leaf" />

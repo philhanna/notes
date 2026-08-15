@@ -28,6 +28,33 @@ export function SearchIcon() {
   );
 }
 
+/**
+ * The triangle's bounding box (x 4-12, y 0-8) is square and sits flush
+ * with the top of the viewBox. Rotating around its own center (50% 25%
+ * of the rendered box, matching that square's midpoint) keeps the ink
+ * in the same square footprint in both orientations, so the collapsed
+ * (right-pointing) and expanded (down-pointing) glyphs land at the same
+ * vertical position — flush with the top of the button that holds it.
+ */
+export function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="12"
+      height="12"
+      aria-hidden="true"
+      focusable="false"
+      className="tree-row__chevron"
+      style={{
+        transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+        transformOrigin: "50% 25%",
+      }}
+    >
+      <path d="M4 0 L12 0 L8 8 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function SignOutIcon() {
   return (
     <svg
