@@ -55,6 +55,19 @@ export function Harness() {
             height="60"
           />
           <h1>Notes</h1>
+          <nav className="app-actions" aria-label="Note actions">
+            {view !== "search" && (
+              <button
+                type="button"
+                className="app-actions__button"
+                title="Search"
+                onClick={() => setView("search")}
+              >
+                <SearchIcon />
+                <span className="visually-hidden">Search</span>
+              </button>
+            )}
+          </nav>
         </header>
         {view === "search" && (
           <SearchView
@@ -78,19 +91,6 @@ export function Harness() {
             onRevealHandled={() => setRevealPath(null)}
           />
         )}
-        <nav className="app-actions" aria-label="Note actions">
-          {view !== "search" && (
-            <button
-              type="button"
-              className="app-actions__button"
-              title="Search"
-              onClick={() => setView("search")}
-            >
-              <SearchIcon />
-              <span className="visually-hidden">Search</span>
-            </button>
-          )}
-        </nav>
       </main>
     </>
   );

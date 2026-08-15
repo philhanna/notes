@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { loadRepoConfig } from "../auth/repoConfig.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
 import { useAuth } from "../auth/useAuth.ts";
@@ -45,6 +46,7 @@ export function App() {
   const [state, setState] = useState<LoadState>({ phase: "idle" });
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [headerActions, setHeaderActions] = useState<HTMLElement | null>(null);
   const isOnline = useOnlineStatus();
 
   useEffect(() => {
@@ -127,6 +129,7 @@ export function App() {
         key={`${state.config.owner}/${state.config.repo}`}
         state={state}
         onSignOut={auth.signOut}
+        actionsContainer={headerActions}
       />
     );
   }
@@ -146,6 +149,11 @@ export function App() {
             height="60"
           />
           <h1>My Notes</h1>
+          <nav
+            className="app-actions"
+            aria-label="Note actions"
+            ref={setHeaderActions}
+          />
         </header>
         {!isOnline && (
           <p className="status-banner status-banner--offline" role="status">
@@ -170,9 +178,11 @@ export function App() {
 function ReadyApp({
   state,
   onSignOut,
+  actionsContainer,
 }: {
   state: Extract<LoadState, { phase: "ready" }>;
   onSignOut: () => void;
+  actionsContainer: HTMLElement | null;
 }) {
   const documentState = useDocument(state.document, {
     repository: state.repository,
@@ -221,28 +231,32 @@ function ReadyApp({
           onRevealHandled={() => setRevealPath(null)}
         />
       )}
-      <nav className="app-actions" aria-label="Note actions">
-        {view !== "search" && (
-          <button
-            type="button"
-            className="app-actions__button"
-            title="Search"
-            onClick={() => setView("search")}
-          >
-            <SearchIcon />
-            <span className="visually-hidden">Search</span>
-          </button>
+      {actionsContainer &&
+        createPortal(
+          <>
+            {view !== "search" && (
+              <button
+                type="button"
+                className="app-actions__button"
+                title="Search"
+                onClick={() => setView("search")}
+              >
+                <SearchIcon />
+                <span className="visually-hidden">Search</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="app-actions__button"
+              title="Sign out"
+              onClick={signOut}
+            >
+              <SignOutIcon />
+              <span className="visually-hidden">Sign out</span>
+            </button>
+          </>,
+          actionsContainer,
         )}
-        <button
-          type="button"
-          className="app-actions__button"
-          title="Sign out"
-          onClick={signOut}
-        >
-          <SignOutIcon />
-          <span className="visually-hidden">Sign out</span>
-        </button>
-      </nav>
     </>
   );
 }

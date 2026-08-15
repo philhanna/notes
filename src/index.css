@@ -59,10 +59,10 @@ main {
 
 .app-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding-bottom: 1rem;
-  padding-right: 6.5rem;
   border-bottom: 2px solid var(--tan-200);
   margin-bottom: 1.25rem;
 }
@@ -72,6 +72,11 @@ main {
   height: 3.25rem;
   flex: none;
   image-rendering: auto;
+}
+
+.app-header h1 {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 h1,
@@ -178,24 +183,19 @@ code,
 }
 
 .app-actions {
-  position: fixed;
-  z-index: 7;
-  top: calc(0.75rem + env(safe-area-inset-top));
-  right: 1rem;
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   gap: 0.5rem;
+  margin-left: auto;
 }
 
 .app-actions__button {
   display: grid;
   width: 2.75rem;
-  min-width: 0;
   height: 2.75rem;
   padding: 0;
   border-radius: 50%;
-  background: rgb(251 245 231 / 96%);
-  box-shadow: 0 0.15rem 0.6rem rgb(103 73 31 / 15%);
-  backdrop-filter: blur(0.5rem);
   place-items: center;
 }
 
