@@ -401,6 +401,9 @@ code,
 }
 
 .tree-row__disclosure {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   color: var(--tan-700);
   font-size: 1.35rem;
   font-weight: 900;
