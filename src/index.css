@@ -459,8 +459,6 @@ code,
 
 .tree-row__preview--markdown {
   display: inline-block;
-  /* Multi-line previews shouldn't stretch to the row's shared baseline. */
-  align-self: start;
 }
 
 .tree-row__preview--markdown code {
