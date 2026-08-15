@@ -158,7 +158,7 @@ describe("TreeBrowser", () => {
 
     const previews = screen
       .getAllByRole("treeitem", { name: /^\[[0-2]\],/ })
-      .map((item) => within(item).getByRole("code").textContent);
+      .map((item) => item.querySelector(".tree-row__preview")?.textContent);
     expect(previews).toEqual(["2", "1", "3"]);
   });
 
@@ -314,7 +314,7 @@ describe("TreeBrowser", () => {
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: "Expand list" }));
     const first = row(/^\[0\],/);
-    await user.click(within(first).getByRole("code"));
+    await user.click(within(first).getByText("1"));
 
     expect(first).toHaveAttribute("aria-selected", "true");
     expect(within(first).queryByLabelText("Value")).not.toBeInTheDocument();

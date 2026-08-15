@@ -122,11 +122,12 @@ export function TreeRow({
     editing !== null && encodePointer(editing.path) === node.pointer;
   const isViewing = isEditing && editing.mode === "view";
   const inlinePreview = useMemo(() => {
-    if (typeof node.value !== "string" || node.value.trim() === "") {
-      return null;
-    }
-    return renderInline(node.value);
-  }, [node.value]);
+    if (node.container) return null;
+    const text =
+      typeof node.value === "string" ? node.value : JSON.stringify(node.value);
+    if (text.trim() === "") return null;
+    return renderInline(text);
+  }, [node.container, node.value]);
   const blockHtml = useMemo(() => {
     if (!isViewing || typeof node.value !== "string") return null;
     return renderBlock(node.value);

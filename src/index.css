@@ -445,15 +445,14 @@ code,
   min-width: 2rem;
   max-width: 25rem;
   margin-left: 0.35rem;
-  overflow: hidden;
   color: var(--ink);
   font-weight: 400;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .tree-row__preview--markdown {
   display: inline-block;
-  white-space: nowrap;
 }
 
 .tree-row__preview--markdown code {
