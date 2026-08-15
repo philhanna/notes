@@ -66,7 +66,7 @@ export function renderInline(source: string): InlineRender {
   const rendered = joinParts(tokens.map(flattenBlockToken), " ");
   return {
     html: DOMPurify.sanitize(rendered.html, {
-      ALLOWED_TAGS: ["strong", "em", "s", "code", "span", "a"],
+      ALLOWED_TAGS: ["strong", "em", "s", "code", "span", "a", "br"],
       ALLOWED_ATTR: ["class", "href", "title", "target", "rel"],
     }),
     plainText: rendered.plainText,
@@ -95,10 +95,21 @@ function flattenBlockToken(token: Token): InlineRender {
       return joinParts(inner, " ");
     }
     case "list": {
-      const items = (token as Tokens.List).items.map((item) =>
-        joinParts(item.tokens.map(flattenBlockToken), " "),
-      );
-      return joinParts(items, " · ");
+      const list = token as Tokens.List;
+      const items = list.items.map((item, index) => {
+        const contents = joinParts(item.tokens.map(flattenBlockToken), " ");
+        const marker = list.ordered
+          ? `${(list.start === "" ? 1 : list.start) + index}.`
+          : "•";
+        return {
+          html: `${marker} ${contents.html}`,
+          plainText: `${marker} ${contents.plainText}`,
+        };
+      });
+      return {
+        html: items.map((item) => item.html).join("<br>"),
+        plainText: items.map((item) => item.plainText).join("\n"),
+      };
     }
     case "code": {
       const raw = (token as Tokens.Code).text;

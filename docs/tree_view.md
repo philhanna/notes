@@ -94,7 +94,7 @@ A scalar row contains:
 1. a leaf or type icon;
 2. its key or array index;
 3. a compact separator; for example `:`;
-4. a single-line value preview; and
+4. a compact value preview; and
 5. a row actions button.
 
 Children appear immediately after an expanded parent and are indented one level.
@@ -136,12 +136,13 @@ Proposed density:
 - indentation: approximately 16 CSS pixels per nesting level;
 - row padding: 4–6 CSS pixels vertically and 6–8 horizontally;
 - icons and disclosure controls: approximately 16 CSS pixels; and
-- no wrapping in the normal row.
+- no wrapping in the normal row except between Markdown list items.
 
 Long keys and scalar previews use ellipsis. The full text is available through
 the selected row's editor and may also be exposed with a tooltip. The key gets
 space before the value preview is truncated. Multiline strings remain one line
-in the tree, with line breaks represented or collapsed for preview.
+in the tree, with line breaks represented or collapsed for preview, except that
+Markdown list items retain their item boundaries as line breaks.
 
 Action buttons should appear on hover or keyboard focus on devices with a fine
 pointer. On touch devices the actions button should remain visible. It must

@@ -57,12 +57,12 @@ fit there. This proposal uses two different renderings of the same source
 string, both produced by one shared module (see below) so there is a single
 place that owns parsing and sanitizing policy.
 
-### 1. Row preview — inline only, flattened to one line
+### 1. Row preview — compact rendering
 
 Replaces the `<code className="tree-row__preview">{JSON.stringify(node.value)}</code>`
 branch in `TreeRow.tsx` for string nodes only.
 
-- Parse the string and keep only what can survive on one line: bold,
+- Parse the string and keep compact inline formatting: bold,
   italic, strikethrough, and inline code. Links render as real, clickable
   anchors (`target="_blank" rel="noopener noreferrer"`, restricted to the
   same `http:`/`https:`/`mailto:` allowlist as the view panel); a
@@ -72,8 +72,7 @@ branch in `TreeRow.tsx` for string nodes only.
   - paragraph and line breaks collapse to a single space, consistent with
     tree_view.md's existing "line breaks represented or collapsed for
     preview" rule for multiline strings;
-  - list items are flattened and joined with a middle-dot separator
-    (`item one · item two`);
+  - list items retain their bullet or number and are separated by line breaks;
   - blockquote markers are stripped, leaving the quoted text inline;
   - fenced/indented code blocks show as inline `code` styling of their
     first line, with a trailing ellipsis if more follows;

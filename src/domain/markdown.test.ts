@@ -21,9 +21,16 @@ describe("renderInline", () => {
     expect(result.plainText).toBe("first line second line third paragraph");
   });
 
-  it("flattens list items joined by a middle dot", () => {
+  it("puts bulleted list items on separate lines", () => {
     const result = renderInline("- item one\n- item two");
-    expect(result.plainText).toBe("item one · item two");
+    expect(result.html).toBe("• item one<br>• item two");
+    expect(result.plainText).toBe("• item one\n• item two");
+  });
+
+  it("puts numbered list items on separate lines and preserves the start", () => {
+    const result = renderInline("3. item three\n4. item four");
+    expect(result.html).toBe("3. item three<br>4. item four");
+    expect(result.plainText).toBe("3. item three\n4. item four");
   });
 
   it("strips blockquote markers, leaving quoted text inline", () => {

@@ -304,9 +304,9 @@ browsers, with larger coarse-pointer targets and horizontal scrolling for
 unusually deep paths.
 
 Every string scalar's row preview and rendered view are Markdown: the closed
-row shows a one-line, inline-only rendering (bold, italic, strikethrough,
+row shows a compact rendering (bold, italic, strikethrough,
 inline code; links show their text but are not clickable; block constructs
-flatten onto the line), while the row's panel shows full CommonMark
+flatten onto the line except that list items retain their own lines), while the row's panel shows full CommonMark
 (headings, lists, blockquotes, code blocks, and real links restricted to
 `http:`, `https:`, and `mailto:` targets). Raw HTML embedded in a string is
 always treated as literal text, never executed. See `src/domain/markdown.ts`
