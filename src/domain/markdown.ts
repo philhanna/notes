@@ -63,7 +63,7 @@ export interface InlineRender {
 
 export function renderInline(source: string): InlineRender {
   const tokens = inlineMarked.lexer(source);
-  const rendered = joinParts(tokens.map(flattenBlockToken), " ");
+  const rendered = joinBlockTokens(tokens);
   return {
     html: DOMPurify.sanitize(rendered.html, {
       ALLOWED_TAGS: ["strong", "em", "s", "code", "span", "a", "br"],
@@ -71,6 +71,28 @@ export function renderInline(source: string): InlineRender {
     }),
     plainText: rendered.plainText,
   };
+}
+
+function joinBlockTokens(tokens: Token[]): InlineRender {
+  const parts = tokens
+    .map((token) => ({ token, rendered: flattenBlockToken(token) }))
+    .filter(
+      ({ rendered }) => rendered.html !== "" || rendered.plainText !== "",
+    );
+
+  return parts.reduce<InlineRender>(
+    (result, { token, rendered }, index) => {
+      if (index === 0) return rendered;
+      const previousToken = parts[index - 1]!.token;
+      const headingBeforeList =
+        previousToken.type === "heading" && token.type === "list";
+      return {
+        html: `${result.html}${headingBeforeList ? "<br>" : " "}${rendered.html}`,
+        plainText: `${result.plainText}${headingBeforeList ? "\n" : " "}${rendered.plainText}`,
+      };
+    },
+    { html: "", plainText: "" },
+  );
 }
 
 function flattenBlockToken(token: Token): InlineRender {

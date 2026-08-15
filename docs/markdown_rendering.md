@@ -73,6 +73,7 @@ branch in `TreeRow.tsx` for string nodes only.
     tree_view.md's existing "line breaks represented or collapsed for
     preview" rule for multiline strings;
   - list items retain their bullet or number and are separated by line breaks;
+    a list following a heading also starts on a new line;
   - blockquote markers are stripped, leaving the quoted text inline;
   - fenced/indented code blocks show as inline `code` styling of their
     first line, with a trailing ellipsis if more follows;

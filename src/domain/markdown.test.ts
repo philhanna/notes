@@ -33,6 +33,14 @@ describe("renderInline", () => {
     expect(result.plainText).toBe("3. item three\n4. item four");
   });
 
+  it("puts a list on a new line after a heading", () => {
+    const result = renderInline("# Heading\n\n- item one\n- item two");
+    expect(result.html).toBe(
+      "<strong>Heading</strong><br>• item one<br>• item two",
+    );
+    expect(result.plainText).toBe("Heading\n• item one\n• item two");
+  });
+
   it("strips blockquote markers, leaving quoted text inline", () => {
     const result = renderInline("> quoted text");
     expect(result.plainText).toBe("quoted text");
