@@ -29,17 +29,18 @@ export function SearchIcon() {
 }
 
 /**
- * The triangle's bounding box (x 4-12, y 0-8) is square and sits flush
- * with the top of the viewBox. Rotating around its own center (50% 25%
- * of the rendered box, matching that square's midpoint) keeps the ink
- * in the same square footprint in both orientations, so the collapsed
- * (right-pointing) and expanded (down-pointing) glyphs land at the same
- * vertical position — flush with the top of the button that holds it.
+ * The triangle fills its whole 12x12 viewBox and is square, so rotating
+ * it about the box's own center (the default transform-origin) keeps
+ * the same footprint in both orientations. `.tree-row__line` aligns its
+ * grid items by text baseline (index.css) rather than a hardcoded pixel
+ * offset, since where a font's glyph "ink" sits relative to its own
+ * line box varies across platforms — baseline is the one reference
+ * browsers compute consistently from the actual font metrics in use.
  */
 export function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
     <svg
-      viewBox="0 0 16 16"
+      viewBox="0 0 12 12"
       width="12"
       height="12"
       aria-hidden="true"
@@ -47,10 +48,9 @@ export function ChevronIcon({ expanded }: { expanded: boolean }) {
       className="tree-row__chevron"
       style={{
         transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
-        transformOrigin: "50% 25%",
       }}
     >
-      <path d="M4 0 L12 0 L8 8 Z" fill="currentColor" />
+      <path d="M0 0 L12 0 L6 12 Z" fill="currentColor" />
     </svg>
   );
 }
