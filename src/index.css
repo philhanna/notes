@@ -407,6 +407,13 @@ code,
 
 .tree-row__disclosure--leaf {
   display: block;
+  /*
+   * Empty, so it has no text baseline of its own -- grid baseline alignment
+   * falls back to its bottom edge (min-height: 1.75rem), which pushes every
+   * other cell in the row down to match. Opt out so it doesn't stretch
+   * single-line rows or shove wrapped multi-line preview text down.
+   */
+  align-self: start;
 }
 
 .tree-row__icon {
@@ -452,6 +459,8 @@ code,
 
 .tree-row__preview--markdown {
   display: inline-block;
+  /* Multi-line previews shouldn't stretch to the row's shared baseline. */
+  align-self: start;
 }
 
 .tree-row__preview--markdown code {
