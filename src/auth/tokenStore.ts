@@ -35,3 +35,20 @@ export function isRefreshTokenExpired(token: Token, now = Date.now()): boolean {
     token.refreshTokenExpiresAt !== null && token.refreshTokenExpiresAt <= now
   );
 }
+
+/**
+ * Notifies `callback` with the current token whenever another tab saves,
+ * refreshes, or clears it, so a background tab's stale in-memory token
+ * doesn't outlive the localStorage it was read from (design.md 8).
+ */
+export function subscribeToTokenChanges(
+  callback: (token: Token | null) => void,
+): () => void {
+  function handleStorage(event: StorageEvent): void {
+    if (event.storageArea !== localStorage) return;
+    if (event.key !== null && event.key !== STORAGE_KEY) return;
+    callback(loadToken());
+  }
+  window.addEventListener("storage", handleStorage);
+  return () => window.removeEventListener("storage", handleStorage);
+}

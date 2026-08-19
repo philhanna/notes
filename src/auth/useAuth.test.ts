@@ -158,4 +158,75 @@ describe("useAuth", () => {
     expect(outcome).toEqual({ ok: false, error: { kind: "expired" } });
     expect(loadToken()).toBeNull();
   });
+
+  it("adopts a token another tab saved, via a storage event", async () => {
+    saveToken(token({ accessToken: "gho_old" }));
+    const { result } = renderHook(() => useAuth());
+
+    saveToken(token({ accessToken: "gho_new" }));
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "notes/auth-token",
+          storageArea: localStorage,
+        }),
+      );
+    });
+
+    const outcome = await result.current.getAccessToken();
+    expect(outcome).toEqual({ ok: true, value: "gho_new" });
+  });
+
+  it("getAccessToken adopts a token another tab already refreshed, instead of signing out", async () => {
+    saveToken(
+      token({
+        accessTokenExpiresAt: Date.now() - 1000,
+        refreshToken: "ghr_old",
+      }),
+    );
+    const { result } = renderHook(() => useAuth());
+
+    // Another tab rotated the refresh token concurrently, without this tab
+    // having received the storage event for it yet.
+    saveToken(
+      token({ accessToken: "gho_from_other_tab", refreshToken: "ghr_new" }),
+    );
+    vi.mocked(deviceFlow.refreshAccessToken).mockResolvedValue({
+      ok: false,
+      error: { kind: "expired" },
+    });
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.getAccessToken();
+    });
+
+    expect(outcome).toEqual({ ok: true, value: "gho_from_other_tab" });
+    expect(result.current.status).toBe("signed-in");
+    expect(loadToken()?.accessToken).toBe("gho_from_other_tab");
+  });
+
+  it("getAccessToken signs out when refresh fails and no other tab left a usable token", async () => {
+    saveToken(
+      token({
+        accessTokenExpiresAt: Date.now() - 1000,
+        refreshToken: "ghr_old",
+      }),
+    );
+    const { result } = renderHook(() => useAuth());
+
+    vi.mocked(deviceFlow.refreshAccessToken).mockResolvedValue({
+      ok: false,
+      error: { kind: "expired" },
+    });
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.getAccessToken();
+    });
+
+    expect(outcome).toEqual({ ok: false, error: { kind: "expired" } });
+    expect(result.current.status).toBe("signed-out");
+    expect(loadToken()).toBeNull();
+  });
 });

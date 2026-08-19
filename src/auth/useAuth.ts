@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Result } from "../domain/result.ts";
 import { err, ok } from "../domain/result.ts";
 import {
@@ -12,6 +12,7 @@ import {
   isRefreshTokenExpired,
   loadToken,
   saveToken,
+  subscribeToTokenChanges,
 } from "./tokenStore.ts";
 import type { AuthError, Token } from "./types.ts";
 
@@ -49,6 +50,8 @@ export function useAuth(): AuthState {
     setTokenState(next);
   }, []);
 
+  useEffect(() => subscribeToTokenChanges(setToken), [setToken]);
+
   const signIn = useCallback(() => {
     cancelledRef.current = false;
     setAuthorizing(null);
@@ -85,6 +88,18 @@ export function useAuth(): AuthState {
     const refreshed = await refreshAccessToken(current.refreshToken);
     if (!refreshed.ok) {
       if (refreshed.error.kind === "expired") {
+        // Refresh tokens are single-use: another tab may have already
+        // rotated this one out from under us. Before signing out, check
+        // whether that tab left behind a token that's still good.
+        const fromOtherTab = loadToken();
+        if (
+          fromOtherTab &&
+          fromOtherTab.refreshToken !== current.refreshToken &&
+          !isAccessTokenExpired(fromOtherTab)
+        ) {
+          setToken(fromOtherTab);
+          return ok(fromOtherTab.accessToken);
+        }
         clearToken();
         setToken(null);
       }

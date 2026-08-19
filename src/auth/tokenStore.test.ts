@@ -5,6 +5,7 @@ import {
   isRefreshTokenExpired,
   loadToken,
   saveToken,
+  subscribeToTokenChanges,
 } from "./tokenStore.ts";
 import type { Token } from "./types.ts";
 
@@ -56,6 +57,53 @@ describe("isAccessTokenExpired", () => {
     expect(
       isAccessTokenExpired(token({ accessTokenExpiresAt: now + 120_000 }), now),
     ).toBe(false);
+  });
+});
+
+describe("subscribeToTokenChanges", () => {
+  it("notifies with the current token on a matching storage event", () => {
+    const calls: (Token | null)[] = [];
+    const unsubscribe = subscribeToTokenChanges((t) => calls.push(t));
+
+    saveToken(token());
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "notes/auth-token",
+        storageArea: localStorage,
+      }),
+    );
+
+    expect(calls).toEqual([token()]);
+    unsubscribe();
+  });
+
+  it("ignores storage events for unrelated keys", () => {
+    const calls: (Token | null)[] = [];
+    const unsubscribe = subscribeToTokenChanges((t) => calls.push(t));
+
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "some-other-key",
+        storageArea: localStorage,
+      }),
+    );
+
+    expect(calls).toEqual([]);
+    unsubscribe();
+  });
+
+  it("notifies with null for a key-less event, as fired by localStorage.clear()", () => {
+    saveToken(token());
+    const calls: (Token | null)[] = [];
+    const unsubscribe = subscribeToTokenChanges((t) => calls.push(t));
+
+    clearToken();
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: null, storageArea: localStorage }),
+    );
+
+    expect(calls).toEqual([null]);
+    unsubscribe();
   });
 });
 
