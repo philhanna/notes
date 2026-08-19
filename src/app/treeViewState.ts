@@ -165,6 +165,34 @@ export function removePointerSubtree(
   );
 }
 
+function collectContainerPointers(document: JsonObject, path: Path): string[] {
+  const pointers: string[] = [];
+  function visit(value: JsonValue, currentPath: Path): void {
+    if (!isContainer(value)) return;
+    pointers.push(encodePointer(currentPath));
+    const children = listChildren(document, currentPath);
+    if (!children.ok) return;
+    for (const child of children.value) {
+      visit(child.value, child.path);
+    }
+  }
+  const value = getAtPath(document, path);
+  if (value !== undefined) visit(value, path);
+  return pointers;
+}
+
+export function expandSubtree(
+  document: JsonObject,
+  expandedPaths: ReadonlySet<string>,
+  path: Path,
+): Set<string> {
+  const next = new Set(expandedPaths);
+  for (const pointer of collectContainerPointers(document, path)) {
+    next.add(pointer);
+  }
+  return next;
+}
+
 export function remapArrayReorderPath(
   path: Path,
   parentPath: Path,

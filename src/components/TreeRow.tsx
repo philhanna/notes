@@ -46,6 +46,8 @@ interface TreeRowProps {
   onFocus: (path: Path) => void;
   onSelect: (path: Path) => void;
   onToggle: (path: Path) => void;
+  onExpandAll: (path: Path) => void;
+  onCollapseAll: (path: Path) => void;
   onKeyDown: (
     event: KeyboardEvent<HTMLLIElement>,
     node: VisibleTreeNode,
@@ -98,6 +100,8 @@ export function TreeRow({
   onFocus,
   onSelect,
   onToggle,
+  onExpandAll,
+  onCollapseAll,
   onKeyDown,
   onEdit,
   onCreateEntry,
@@ -451,6 +455,32 @@ export function TreeRow({
               >
                 Add child
               </button>
+            )}
+            {node.container && node.childCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  aria-label={`Expand all in ${node.label}`}
+                  onClick={() => {
+                    closeActions();
+                    onExpandAll(node.path);
+                  }}
+                  disabled={saving}
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Collapse all in ${node.label}`}
+                  onClick={() => {
+                    closeActions();
+                    onCollapseAll(node.path);
+                  }}
+                  disabled={saving}
+                >
+                  Collapse all
+                </button>
+              </>
             )}
             {node.path.length > 0 &&
               typeof node.path[node.path.length - 1] === "string" && (

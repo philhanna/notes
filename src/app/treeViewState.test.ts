@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveVisibleTree,
   expandAncestors,
+  expandSubtree,
   nearestExistingPath,
   remapArrayReorderPath,
   remapArrayReorderPointers,
@@ -81,6 +82,23 @@ describe("treeViewState", () => {
         2,
       ),
     ]).toEqual(["/list/2", "/list/0", "/list/1/name"]);
+  });
+
+  it("expands every container in a subtree, leaving scalars and other branches alone", () => {
+    expect([...expandSubtree(document, new Set(), ["alpha"])]).toEqual([
+      "/alpha",
+      "/alpha/nested",
+    ]);
+    expect([...expandSubtree(document, new Set(["/numeric"]), [])]).toEqual([
+      "/numeric",
+      "",
+      "/alpha",
+      "/alpha/nested",
+      "/list",
+      "/list/0",
+      "/list/1",
+      "/numeric/0",
+    ]);
   });
 
   it("removes deleted subtrees and reconciles invalid stored paths", () => {

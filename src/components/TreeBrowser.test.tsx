@@ -66,6 +66,30 @@ describe("TreeBrowser", () => {
     expect(row(/^\[0\],/)).toBeInTheDocument();
   });
 
+  it("expand all and collapse all act recursively on every level below the node", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await openActions(user, row(/^tips,/), "tips");
+    await user.click(
+      screen.getByRole("button", { name: "Expand all in tips" }),
+    );
+
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "true");
+    expect(row(/^bash,/)).toHaveAttribute("aria-expanded", "true");
+    expect(row(/^fc,/)).toBeInTheDocument();
+
+    await openActions(user, row(/^tips,/), "tips");
+    await user.click(
+      screen.getByRole("button", { name: "Collapse all in tips" }),
+    );
+
+    expect(row(/^tips,/)).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("treeitem", { name: /^bash,/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps selection separate from disclosure", async () => {
     const user = userEvent.setup();
     render(<Harness />);

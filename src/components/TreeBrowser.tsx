@@ -4,6 +4,7 @@ import type { DocumentState, MutationError } from "../app/useDocument.ts";
 import {
   deriveVisibleTree,
   expandAncestors,
+  expandSubtree,
   nearestExistingPath,
   pathsEqual,
   remapArrayReorderPath,
@@ -158,6 +159,16 @@ export function TreeBrowser({
     ) {
       focusPath(path);
     }
+  }
+
+  function expandAll(path: Path) {
+    setExpandedPaths((previous) =>
+      expandSubtree(state.document, previous, path),
+    );
+  }
+
+  function collapseAll(path: Path) {
+    setExpandedPaths((previous) => removePointerSubtree(previous, path));
   }
 
   function handleKeyDown(
@@ -334,6 +345,8 @@ export function TreeBrowser({
         onFocus={setFocusedPath}
         onSelect={() => selectNode(node)}
         onToggle={toggle}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
         onKeyDown={handleKeyDown}
         onEdit={(next) => {
           setEditing(next);
