@@ -27,8 +27,14 @@ export interface AuthState {
    * Referentially stable across renders (reads a ref, not `useState`
    * directly), so a `Repository` built once with this function keeps
    * seeing every later refresh instead of a stale token snapshot.
+   *
+   * `force` skips the locally cached expiry check and refreshes anyway.
+   * Callers use this to recover from a 401 GitHub returns for a token this
+   * device still believes is valid — typically because another device
+   * already rotated it (design.md 8: only unrecoverable expiration should
+   * prompt sign-in again).
    */
-  getAccessToken: () => Promise<Result<string, AuthError>>;
+  getAccessToken: (force?: boolean) => Promise<Result<string, AuthError>>;
 }
 
 /**
@@ -70,45 +76,47 @@ export function useAuth(): AuthState {
     setAuthorizing(null);
   }, [setToken]);
 
-  const getAccessToken = useCallback(async (): Promise<
-    Result<string, AuthError>
-  > => {
-    const current = tokenRef.current;
-    if (!current) {
-      return err({ kind: "unexpected", message: "not signed in" });
-    }
-    if (!isAccessTokenExpired(current)) return ok(current.accessToken);
+  const getAccessToken = useCallback(
+    async (force = false): Promise<Result<string, AuthError>> => {
+      const current = tokenRef.current;
+      if (!current) {
+        return err({ kind: "unexpected", message: "not signed in" });
+      }
+      if (!force && !isAccessTokenExpired(current))
+        return ok(current.accessToken);
 
-    if (!current.refreshToken || isRefreshTokenExpired(current)) {
-      clearToken();
-      setToken(null);
-      return err({ kind: "expired" });
-    }
-
-    const refreshed = await refreshAccessToken(current.refreshToken);
-    if (!refreshed.ok) {
-      if (refreshed.error.kind === "expired") {
-        // Refresh tokens are single-use: another tab may have already
-        // rotated this one out from under us. Before signing out, check
-        // whether that tab left behind a token that's still good.
-        const fromOtherTab = loadToken();
-        if (
-          fromOtherTab &&
-          fromOtherTab.refreshToken !== current.refreshToken &&
-          !isAccessTokenExpired(fromOtherTab)
-        ) {
-          setToken(fromOtherTab);
-          return ok(fromOtherTab.accessToken);
-        }
+      if (!current.refreshToken || isRefreshTokenExpired(current)) {
         clearToken();
         setToken(null);
+        return err({ kind: "expired" });
       }
-      return refreshed;
-    }
-    saveToken(refreshed.value);
-    setToken(refreshed.value);
-    return ok(refreshed.value.accessToken);
-  }, [setToken]);
+
+      const refreshed = await refreshAccessToken(current.refreshToken);
+      if (!refreshed.ok) {
+        if (refreshed.error.kind === "expired") {
+          // Refresh tokens are single-use: another tab may have already
+          // rotated this one out from under us. Before signing out, check
+          // whether that tab left behind a token that's still good.
+          const fromOtherTab = loadToken();
+          if (
+            fromOtherTab &&
+            fromOtherTab.refreshToken !== current.refreshToken &&
+            !isAccessTokenExpired(fromOtherTab)
+          ) {
+            setToken(fromOtherTab);
+            return ok(fromOtherTab.accessToken);
+          }
+          clearToken();
+          setToken(null);
+        }
+        return refreshed;
+      }
+      saveToken(refreshed.value);
+      setToken(refreshed.value);
+      return ok(refreshed.value.accessToken);
+    },
+    [setToken],
+  );
 
   return {
     status: authorizing ? "authorizing" : token ? "signed-in" : "signed-out",

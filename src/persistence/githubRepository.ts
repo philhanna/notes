@@ -43,14 +43,23 @@ interface RepoResponseBody {
  */
 export function createGithubRepository(
   config: RepoConfig,
-  getAccessToken: () => Promise<Result<string, AuthError>>,
+  getAccessToken: (force?: boolean) => Promise<Result<string, AuthError>>,
 ): Repository {
   async function withToken<T>(
     fn: (accessToken: string) => Promise<Result<T, PersistError>>,
   ): Promise<Result<T, PersistError>> {
     const tokenResult = await getAccessToken();
     if (!tokenResult.ok) return err({ kind: "unauthorized" });
-    return fn(tokenResult.value);
+    const result = await fn(tokenResult.value);
+    if (result.ok || result.error.kind !== "unauthorized") return result;
+
+    // The locally cached token looked valid, but GitHub rejected it —
+    // typically because another device already rotated it. Force a refresh
+    // and retry once before surfacing "sign-in expired" (design.md 8: only
+    // unrecoverable expiration should prompt sign-in again).
+    const retryTokenResult = await getAccessToken(true);
+    if (!retryTokenResult.ok) return err({ kind: "unauthorized" });
+    return fn(retryTokenResult.value);
   }
 
   async function checkRepository(): Promise<

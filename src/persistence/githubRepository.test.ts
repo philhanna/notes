@@ -84,6 +84,56 @@ describe("checkRepository", () => {
     });
   });
 
+  it("retries once with a forced-refresh token after a 401, and succeeds", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization;
+      if (auth === "Bearer stale-token") {
+        return fakeResponse(401, { message: "Bad credentials" });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      expect(url).toBe("https://api.github.com/repos/philhanna/notes-data");
+      return fakeResponse(200, {
+        private: true,
+        default_branch: "main",
+        permissions: { push: true },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const getAccessToken = vi.fn(async (force?: boolean) => ({
+      ok: true as const,
+      value: force ? "fresh-token" : "stale-token",
+    }));
+    const repository = createGithubRepository(config, getAccessToken);
+    const result = await repository.checkRepository();
+
+    expect(result).toEqual({
+      ok: true,
+      value: { private: true, writable: true, defaultBranch: "main" },
+    });
+    expect(getAccessToken).toHaveBeenNthCalledWith(1);
+    expect(getAccessToken).toHaveBeenNthCalledWith(2, true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports unauthorized when the forced refresh also fails, without retrying again", async () => {
+    const fetchMock = vi.fn(async () =>
+      fakeResponse(401, { message: "Bad credentials" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const getAccessToken = vi.fn(async (force?: boolean) =>
+      force
+        ? { ok: false as const, error: { kind: "expired" as const } }
+        : { ok: true as const, value: "stale-token" },
+    );
+    const repository = createGithubRepository(config, getAccessToken);
+    const result = await repository.checkRepository();
+
+    expect(result).toEqual({ ok: false, error: { kind: "unauthorized" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("short-circuits without calling fetch when getAccessToken fails", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

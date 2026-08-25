@@ -206,6 +206,21 @@ describe("useAuth", () => {
     expect(loadToken()?.accessToken).toBe("gho_from_other_tab");
   });
 
+  it("getAccessToken(true) forces a refresh even when the cached token looks unexpired", async () => {
+    saveToken(token({ accessToken: "gho_old", refreshToken: "ghr_old" }));
+    vi.mocked(deviceFlow.refreshAccessToken).mockResolvedValue({
+      ok: true,
+      value: token({ accessToken: "gho_new", refreshToken: "ghr_new" }),
+    });
+
+    const { result } = renderHook(() => useAuth());
+    const outcome = await result.current.getAccessToken(true);
+
+    expect(deviceFlow.refreshAccessToken).toHaveBeenCalledWith("ghr_old");
+    expect(outcome).toEqual({ ok: true, value: "gho_new" });
+    expect(loadToken()?.accessToken).toBe("gho_new");
+  });
+
   it("getAccessToken signs out when refresh fails and no other tab left a usable token", async () => {
     saveToken(
       token({
