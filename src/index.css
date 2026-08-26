@@ -433,10 +433,25 @@ code,
 }
 
 .tree-row__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
   min-width: 4rem;
   max-width: 18rem;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tree-row__pin-indicator {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--tan-700);
+}
+
+.tree-row__pin-indicator svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .tree-row__count,
@@ -887,6 +902,29 @@ code,
 .search-results__breadcrumb {
   color: var(--tan-700);
   font-size: 0.875rem;
+}
+
+.shortcuts-view__section + .shortcuts-view__section {
+  margin-top: 1.5rem;
+}
+
+.shortcuts-view__empty {
+  color: var(--tan-700);
+}
+
+.shortcuts-view__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shortcuts-view__row .search-results__item {
+  width: auto;
+  flex: 1;
+}
+
+.shortcuts-view__unpin {
+  flex: none;
 }
 
 .sign-in,

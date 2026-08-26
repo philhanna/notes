@@ -27,8 +27,14 @@ export interface SearchResult {
 }
 
 /** A friendly, case-preserving breadcrumb string rooted at the tree's "Notes" label. */
-function breadcrumbFor(path: Path): string {
+export function breadcrumbFor(path: Path): string {
   return ["Notes", ...path.map(String)].join(" › ");
+}
+
+/** A path's final segment, formatted the way a tree row displays it. */
+export function labelFor(path: Path): string {
+  const last = path[path.length - 1];
+  return typeof last === "number" ? `[${last}]` : String(last);
 }
 
 function scalarText(value: JsonValue): string {
@@ -104,15 +110,11 @@ export function search(index: SearchIndex, query: string): SearchResult[] {
           : null;
     if (matchedIn === null) continue;
 
-    const label =
-      typeof entry.path[entry.path.length - 1] === "number"
-        ? `[${entry.path[entry.path.length - 1]}]`
-        : String(entry.path[entry.path.length - 1]);
     results.push({
       path: entry.path,
       containerPath: entry.path.slice(0, -1),
       breadcrumb: breadcrumbFor(entry.path),
-      label,
+      label: labelFor(entry.path),
       matchedIn,
     });
   }

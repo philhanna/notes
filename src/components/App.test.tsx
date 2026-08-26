@@ -85,6 +85,37 @@ describe("App", () => {
     expect(screen.queryByText("hardinfo")).not.toBeInTheDocument();
   });
 
+  it("pins an entry, finds it in Pinned & recent, and unpins it from there", async () => {
+    const user = userEvent.setup();
+    seedSignedIn();
+    seedRepoConfig();
+    installFetch(createFakeGraph({ hardinfo: "system info" }));
+
+    render(<App />);
+    const hardinfoRow = (await screen.findByText("hardinfo")).closest("li")!;
+
+    await user.click(
+      within(hardinfoRow).getByLabelText("Actions for hardinfo"),
+    );
+    await user.click(within(hardinfoRow).getByRole("button", { name: "Pin" }));
+
+    await user.click(screen.getByRole("button", { name: "Pinned & recent" }));
+    expect(
+      screen.getByRole("heading", { name: "Pinned & recent" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^hardinfo/ }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Unpin hardinfo" }));
+    expect(
+      screen.getByText("Pin an entry from its actions menu to see it here."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to notes" }));
+    expect(await screen.findByText("hardinfo")).toBeInTheDocument();
+  });
+
   it("shows an error and a sign-out control when the document fails to load", async () => {
     seedSignedIn();
     seedRepoConfig();

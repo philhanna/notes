@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveVisibleTree,
+  describeShortcut,
   expandAncestors,
   expandSubtree,
   nearestExistingPath,
@@ -9,6 +10,7 @@ import {
   remapPointerSet,
   removePointerSubtree,
   validateExpandedPaths,
+  validatePointerSet,
 } from "./treeViewState.ts";
 import type { JsonObject } from "../domain/types.ts";
 
@@ -117,5 +119,30 @@ describe("treeViewState", () => {
     expect(nearestExistingPath(document, ["alpha", "missing", "leaf"])).toEqual(
       ["alpha"],
     );
+  });
+
+  it("validates pinned/recent pointers against any existing node, not just containers", () => {
+    expect([
+      ...validatePointerSet(
+        document,
+        new Set(["", "/alpha", "/alpha/one", "/missing"]),
+      ),
+    ]).toEqual(["", "/alpha", "/alpha/one"]);
+  });
+
+  it("resolves a pinned/recent pointer to its label and breadcrumb, or null once gone", () => {
+    expect(describeShortcut(document, "/alpha/one")).toEqual({
+      pointer: "/alpha/one",
+      path: ["alpha", "one"],
+      label: "one",
+      breadcrumb: "Notes › alpha › one",
+    });
+    expect(describeShortcut(document, "/list/0/name")).toEqual({
+      pointer: "/list/0/name",
+      path: ["list", 0, "name"],
+      label: "name",
+      breadcrumb: "Notes › list › 0 › name",
+    });
+    expect(describeShortcut(document, "/missing")).toBeNull();
   });
 });

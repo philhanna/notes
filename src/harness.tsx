@@ -2,8 +2,9 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useDocument } from "./app/useDocument.ts";
 import { createInMemoryRepository } from "./persistence/inMemoryRepository.ts";
-import { SearchIcon } from "./components/icons.tsx";
+import { SearchIcon, StarIcon } from "./components/icons.tsx";
 import { SearchView } from "./components/SearchView.tsx";
+import { ShortcutsView } from "./components/ShortcutsView.tsx";
 import { TreeBrowser } from "./components/TreeBrowser.tsx";
 import type { Path } from "./domain/types.ts";
 import "./index.css";
@@ -32,13 +33,15 @@ export function Harness() {
     repository,
     initialSha: "sha-0",
   });
-  const [view, setView] = useState<"tree" | "search">("tree");
+  const [view, setView] = useState<"tree" | "search" | "shortcuts">("tree");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set([""]),
   );
   const [selectedPath, setSelectedPath] = useState<Path>([]);
   const [focusedPath, setFocusedPath] = useState<Path>([]);
   const [revealPath, setRevealPath] = useState<Path | null>(null);
+  const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(() => new Set());
+  const [recentPaths, setRecentPaths] = useState<Set<string>>(() => new Set());
 
   return (
     <>
@@ -56,16 +59,27 @@ export function Harness() {
           />
           <h1>Notes</h1>
           <nav className="app-actions" aria-label="Note actions">
-            {view !== "search" && (
-              <button
-                type="button"
-                className="app-actions__button"
-                title="Search"
-                onClick={() => setView("search")}
-              >
-                <SearchIcon />
-                <span className="visually-hidden">Search</span>
-              </button>
+            {view === "tree" && (
+              <>
+                <button
+                  type="button"
+                  className="app-actions__button"
+                  title="Search"
+                  onClick={() => setView("search")}
+                >
+                  <SearchIcon />
+                  <span className="visually-hidden">Search</span>
+                </button>
+                <button
+                  type="button"
+                  className="app-actions__button"
+                  title="Pinned & recent"
+                  onClick={() => setView("shortcuts")}
+                >
+                  <StarIcon />
+                  <span className="visually-hidden">Pinned &amp; recent</span>
+                </button>
+              </>
             )}
           </nav>
         </header>
@@ -76,6 +90,22 @@ export function Harness() {
             onClose={() => setView("tree")}
           />
         )}
+        {view === "shortcuts" && (
+          <ShortcutsView
+            document={documentState.document}
+            pinnedPaths={pinnedPaths}
+            recentPaths={recentPaths}
+            onSelectPath={setRevealPath}
+            onUnpin={(pointer) => {
+              setPinnedPaths((previous) => {
+                const next = new Set(previous);
+                next.delete(pointer);
+                return next;
+              });
+            }}
+            onClose={() => setView("tree")}
+          />
+        )}
         {view === "tree" && (
           <TreeBrowser
             state={documentState}
@@ -83,9 +113,13 @@ export function Harness() {
               expandedPaths,
               selectedPath,
               focusedPath,
+              pinnedPaths,
+              recentPaths,
               setExpandedPaths,
               setSelectedPath,
               setFocusedPath,
+              setPinnedPaths,
+              setRecentPaths,
             }}
             revealPath={revealPath}
             onRevealHandled={() => setRevealPath(null)}

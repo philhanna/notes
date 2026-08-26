@@ -18,7 +18,7 @@ import type { JsonObject, JsonValue, Path } from "../domain/types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { CreateEntryForm } from "./CreateEntryForm.tsx";
 import { describeError } from "./errors.ts";
-import { ChevronIcon } from "./icons.tsx";
+import { ChevronIcon, StarIcon } from "./icons.tsx";
 import { ValueEditor } from "./ValueEditor.tsx";
 
 export type RowEditor =
@@ -41,11 +41,13 @@ interface TreeRowProps {
   focused: boolean;
   editing: RowEditor | null;
   destinations: Destination[];
+  pinned: boolean;
   children?: ReactNode;
   registerRef: (pointer: string, element: HTMLLIElement | null) => void;
   onFocus: (path: Path) => void;
   onSelect: (path: Path) => void;
   onToggle: (path: Path) => void;
+  onTogglePin: (path: Path) => void;
   onExpandAll: (path: Path) => void;
   onCollapseAll: (path: Path) => void;
   onKeyDown: (
@@ -95,11 +97,13 @@ export function TreeRow({
   focused,
   editing,
   destinations,
+  pinned,
   children,
   registerRef,
   onFocus,
   onSelect,
   onToggle,
+  onTogglePin,
   onExpandAll,
   onCollapseAll,
   onKeyDown,
@@ -367,6 +371,11 @@ export function TreeRow({
           {node.kind === "object" ? "{}" : node.kind === "array" ? "[]" : "•"}
         </span>
         <span className="tree-row__label" title={node.label}>
+          {pinned && (
+            <span className="tree-row__pin-indicator" aria-hidden="true">
+              <StarIcon filled />
+            </span>
+          )}
           {node.label}
         </span>
         {node.container ? (
@@ -481,6 +490,18 @@ export function TreeRow({
                   Collapse all
                 </button>
               </>
+            )}
+            {node.path.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeActions();
+                  onTogglePin(node.path);
+                }}
+                disabled={saving}
+              >
+                {pinned ? "Unpin" : "Pin"}
+              </button>
             )}
             {node.path.length > 0 &&
               typeof node.path[node.path.length - 1] === "string" && (

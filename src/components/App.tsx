@@ -3,6 +3,13 @@ import { createPortal } from "react-dom";
 import { loadRepoConfig } from "../auth/repoConfig.ts";
 import type { RepoConfig } from "../auth/repoConfig.ts";
 import { useAuth } from "../auth/useAuth.ts";
+import {
+  clearShortcuts,
+  loadPinned,
+  loadRecent,
+  savePinned,
+  saveRecent,
+} from "../app/shortcutsStorage.ts";
 import { useDocument } from "../app/useDocument.ts";
 import { useOnlineStatus } from "../app/useOnlineStatus.ts";
 import type { JsonObject } from "../domain/types.ts";
@@ -14,8 +21,9 @@ import {
 import { createGithubRepository } from "../persistence/githubRepository.ts";
 import type { Repository } from "../persistence/repository.ts";
 import { describePersistError } from "./errors.ts";
-import { SearchIcon, SignOutIcon } from "./icons.tsx";
+import { SearchIcon, SignOutIcon, StarIcon } from "./icons.tsx";
 import { SearchView } from "./SearchView.tsx";
+import { ShortcutsView } from "./ShortcutsView.tsx";
 import { SignIn } from "./SignIn.tsx";
 import { Setup } from "./Setup.tsx";
 import { TreeBrowser } from "./TreeBrowser.tsx";
@@ -188,12 +196,14 @@ function ReadyApp({
     repository: state.repository,
     initialSha: state.sha,
   });
-  const [view, setView] = useState<"tree" | "search">("tree");
+  const [view, setView] = useState<"tree" | "search" | "shortcuts">("tree");
   const [expandedPaths, setExpandedPaths] =
     useState<Set<string>>(loadExpandedPaths);
   const [selectedPath, setSelectedPath] = useState<Path>([]);
   const [focusedPath, setFocusedPath] = useState<Path>([]);
   const [revealPath, setRevealPath] = useState<Path | null>(null);
+  const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(loadPinned);
+  const [recentPaths, setRecentPaths] = useState<Set<string>>(loadRecent);
 
   useEffect(() => {
     localStorage.setItem(
@@ -202,9 +212,26 @@ function ReadyApp({
     );
   }, [expandedPaths]);
 
+  useEffect(() => {
+    savePinned(pinnedPaths);
+  }, [pinnedPaths]);
+
+  useEffect(() => {
+    saveRecent(recentPaths);
+  }, [recentPaths]);
+
   function signOut() {
     localStorage.removeItem(TREE_EXPANSION_KEY);
+    clearShortcuts();
     onSignOut();
+  }
+
+  function unpin(pointer: string) {
+    setPinnedPaths((previous) => {
+      const next = new Set(previous);
+      next.delete(pointer);
+      return next;
+    });
   }
 
   return (
@@ -216,6 +243,16 @@ function ReadyApp({
           onClose={() => setView("tree")}
         />
       )}
+      {view === "shortcuts" && (
+        <ShortcutsView
+          document={documentState.document}
+          pinnedPaths={pinnedPaths}
+          recentPaths={recentPaths}
+          onSelectPath={(path) => setRevealPath(path)}
+          onUnpin={unpin}
+          onClose={() => setView("tree")}
+        />
+      )}
       {view === "tree" && (
         <TreeBrowser
           state={documentState}
@@ -223,9 +260,13 @@ function ReadyApp({
             expandedPaths,
             selectedPath,
             focusedPath,
+            pinnedPaths,
+            recentPaths,
             setExpandedPaths,
             setSelectedPath,
             setFocusedPath,
+            setPinnedPaths,
+            setRecentPaths,
           }}
           revealPath={revealPath}
           onRevealHandled={() => setRevealPath(null)}
@@ -234,16 +275,27 @@ function ReadyApp({
       {actionsContainer &&
         createPortal(
           <>
-            {view !== "search" && (
-              <button
-                type="button"
-                className="app-actions__button"
-                title="Search"
-                onClick={() => setView("search")}
-              >
-                <SearchIcon />
-                <span className="visually-hidden">Search</span>
-              </button>
+            {view === "tree" && (
+              <>
+                <button
+                  type="button"
+                  className="app-actions__button"
+                  title="Search"
+                  onClick={() => setView("search")}
+                >
+                  <SearchIcon />
+                  <span className="visually-hidden">Search</span>
+                </button>
+                <button
+                  type="button"
+                  className="app-actions__button"
+                  title="Pinned & recent"
+                  onClick={() => setView("shortcuts")}
+                >
+                  <StarIcon />
+                  <span className="visually-hidden">Pinned &amp; recent</span>
+                </button>
+              </>
             )}
             <button
               type="button"

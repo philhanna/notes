@@ -170,6 +170,42 @@ describe("TreeBrowser", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("pins an entry from its actions menu and shows an inline indicator", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Pin" }));
+
+    expect(
+      hardinfo.querySelector(".tree-row__pin-indicator"),
+    ).toBeInTheDocument();
+
+    await openActions(user, hardinfo, "hardinfo");
+    expect(
+      within(hardinfo).getByRole("button", { name: "Unpin" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a pinned entry pinned after it is renamed", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Pin" }));
+
+    await openActions(user, hardinfo, "hardinfo");
+    await user.click(within(hardinfo).getByRole("button", { name: "Rename" }));
+    const input = screen.getByLabelText("New key");
+    await user.clear(input);
+    await user.type(input, "sysinfo");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      row(/^sysinfo,/).querySelector(".tree-row__pin-indicator"),
+    ).toBeInTheDocument();
+  });
+
   it("reorders array elements without leaving the expanded tree", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -184,6 +220,27 @@ describe("TreeBrowser", () => {
       .getAllByRole("treeitem", { name: /^\[[0-2]\],/ })
       .map((item) => item.querySelector(".tree-row__preview")?.textContent);
     expect(previews).toEqual(["2", "1", "3"]);
+  });
+
+  it("keeps a pinned array element pinned after it moves via reorder", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Expand list" }));
+    const first = row(/^\[0\],/);
+    await openActions(user, first, "[0]");
+    await user.click(within(first).getByRole("button", { name: "Pin" }));
+
+    await openActions(user, first, "[0]");
+    await user.click(
+      within(first).getByRole("button", { name: "Move [0] down" }),
+    );
+
+    expect(
+      row(/^\[1\],/).querySelector(".tree-row__pin-indicator"),
+    ).toBeInTheDocument();
+    expect(
+      row(/^\[0\],/).querySelector(".tree-row__pin-indicator"),
+    ).not.toBeInTheDocument();
   });
 
   it("moves an entry with the visual destination picker", async () => {

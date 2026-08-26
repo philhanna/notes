@@ -13,8 +13,10 @@ import {
   removePointerSubtree,
   replacePathPrefix,
   validateExpandedPaths,
+  validatePointerSet,
 } from "../app/treeViewState.ts";
 import type { VisibleTreeNode } from "../app/treeViewState.ts";
+import { recordVisit } from "../app/shortcutsStorage.ts";
 import {
   adjustPathAfterRemoval,
   encodePointer,
@@ -32,11 +34,19 @@ export interface TreeViewState {
   expandedPaths: Set<string>;
   selectedPath: Path;
   focusedPath: Path;
+  pinnedPaths: Set<string>;
+  recentPaths: Set<string>;
   setExpandedPaths: (
     value: Set<string> | ((previous: Set<string>) => Set<string>),
   ) => void;
   setSelectedPath: (path: Path) => void;
   setFocusedPath: (path: Path) => void;
+  setPinnedPaths: (
+    value: Set<string> | ((previous: Set<string>) => Set<string>),
+  ) => void;
+  setRecentPaths: (
+    value: Set<string> | ((previous: Set<string>) => Set<string>),
+  ) => void;
 }
 
 interface TreeBrowserProps {
@@ -57,6 +67,8 @@ export function TreeBrowser({
   );
   const [localSelected, setLocalSelected] = useState<Path>([]);
   const [localFocused, setLocalFocused] = useState<Path>([]);
+  const [localPinned, setLocalPinned] = useState<Set<string>>(() => new Set());
+  const [, setLocalRecent] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState<RowEditor | null>(null);
   const [draggedPath, setDraggedPath] = useState<Path | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
@@ -64,9 +76,18 @@ export function TreeBrowser({
   const expandedPaths = treeState?.expandedPaths ?? localExpanded;
   const selectedPath = treeState?.selectedPath ?? localSelected;
   const focusedPath = treeState?.focusedPath ?? localFocused;
+  const pinnedPaths = treeState?.pinnedPaths ?? localPinned;
   const setExpandedPaths = treeState?.setExpandedPaths ?? setLocalExpanded;
   const setSelectedPath = treeState?.setSelectedPath ?? setLocalSelected;
   const setFocusedPath = treeState?.setFocusedPath ?? setLocalFocused;
+  const setPinnedPaths = treeState?.setPinnedPaths ?? setLocalPinned;
+  const setRecentPaths = treeState?.setRecentPaths ?? setLocalRecent;
+
+  /** Applies the same path transform to both shortcut lists (docs/pinned.md 5). */
+  function remapShortcuts(transform: (previous: Set<string>) => Set<string>) {
+    setPinnedPaths(transform);
+    setRecentPaths(transform);
+  }
 
   const visibleNodes = useMemo(
     () => deriveVisibleTree(state.document, expandedPaths),
@@ -104,6 +125,27 @@ export function TreeBrowser({
     setFocusedPath,
   ]);
 
+  /**
+   * Pinned/recent pointers are otherwise kept correct by the precise
+   * remap in each mutation handler below (docs/pinned.md 5) — never by
+   * comparing against `state.document` on every render, which would race
+   * against those handlers: `state.document` can commit (and re-run this
+   * component) before a handler's own follow-up remap call lands, since
+   * they resolve on separate promise continuations. This runs the
+   * existence check exactly once, against whatever document TreeBrowser
+   * first receives, to drop anything already stale in localStorage from a
+   * previous session (docs/pinned.md 5's "on every load"); ShortcutsView's
+   * own defensive filtering (docs/pinned.md 4) is the safety net beyond
+   * that single check.
+   */
+  const initialShortcutPruneRef = useRef(false);
+  useEffect(() => {
+    if (initialShortcutPruneRef.current) return;
+    initialShortcutPruneRef.current = true;
+    setPinnedPaths((previous) => validatePointerSet(state.document, previous));
+    setRecentPaths((previous) => validatePointerSet(state.document, previous));
+  }, [state.document, setPinnedPaths, setRecentPaths]);
+
   useEffect(() => {
     if (revealPath === null) return;
     setExpandedPaths((previous) => expandAncestors(previous, revealPath));
@@ -135,6 +177,19 @@ export function TreeBrowser({
     } else {
       setEditing((current) => (current?.mode === "view" ? null : current));
     }
+    if (!node.container) {
+      setRecentPaths((previous) => recordVisit(previous, node.pointer));
+    }
+  }
+
+  function togglePin(path: Path) {
+    const pointer = encodePointer(path);
+    setPinnedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(pointer)) next.delete(pointer);
+      else next.add(pointer);
+      return next;
+    });
   }
 
   function focusPath(path: Path) {
@@ -211,6 +266,7 @@ export function TreeBrowser({
     );
     setSelectedPath(replacePathPrefix(selectedPath, oldPath, newPath));
     setFocusedPath(replacePathPrefix(focusedPath, oldPath, newPath));
+    remapShortcuts((previous) => remapPointerSet(previous, oldPath, newPath));
   }
 
   async function rename(parentPath: Path, oldKey: string, newKey: string) {
@@ -234,6 +290,9 @@ export function TreeBrowser({
       );
       setFocusedPath(
         remapArrayReorderPath(focusedPath, parentPath, fromIndex, toIndex),
+      );
+      remapShortcuts((previous) =>
+        remapArrayReorderPointers(previous, parentPath, fromIndex, toIndex),
       );
     }
     return result;
@@ -277,6 +336,13 @@ export function TreeBrowser({
         );
         setSelectedPath(insertedPath);
         setFocusedPath(insertedPath);
+        // Removing an array element shifts every later sibling's index, so
+        // (as with expandedPaths above) any pinned/recent pointer still
+        // under sourceParent can no longer be trusted and is dropped rather
+        // than remapped (docs/pinned.md 5).
+        remapShortcuts((previous) =>
+          removePointerSubtree(previous, sourceParent),
+        );
       } else {
         updatePathState(path, insertedPath);
       }
@@ -299,6 +365,16 @@ export function TreeBrowser({
       setSelectedPath(parentPath);
       focusPath(parentPath);
       setEditing(null);
+      // Deleting an array element shifts every later sibling's index, so
+      // (unlike the object case) any pinned/recent pointer for a remaining
+      // sibling is no longer trustworthy — drop the whole parent's entries
+      // rather than the deleted node alone (docs/pinned.md 5).
+      remapShortcuts((previous) => {
+        const withoutSubtree = removePointerSubtree(previous, path);
+        return isJsonArray(parent)
+          ? removePointerSubtree(withoutSubtree, parentPath)
+          : withoutSubtree;
+      });
     }
     return result;
   }
@@ -320,6 +396,19 @@ export function TreeBrowser({
         if (!isContainer(value)) next.delete(encodePointer(path));
         return validateExpandedPaths(result.value, next);
       });
+      // The node itself keeps its pinned/recent entry regardless of the new
+      // value's kind — only content that used to live underneath it (now
+      // replaced) is dropped (docs/pinned.md 5).
+      remapShortcuts((previous) => {
+        const pointer = encodePointer(path);
+        const next = new Set(
+          [...previous].filter(
+            (candidate) =>
+              candidate === pointer || !candidate.startsWith(`${pointer}/`),
+          ),
+        );
+        return validatePointerSet(result.value, next);
+      });
     }
     return result;
   }
@@ -338,6 +427,7 @@ export function TreeBrowser({
         focused={pathsEqual(focusedPath, node.path)}
         editing={editing}
         destinations={destinations}
+        pinned={pinnedPaths.has(node.pointer)}
         registerRef={(pointer, element) => {
           if (element) rowRefs.current.set(pointer, element);
           else rowRefs.current.delete(pointer);
@@ -345,6 +435,7 @@ export function TreeBrowser({
         onFocus={setFocusedPath}
         onSelect={() => selectNode(node)}
         onToggle={toggle}
+        onTogglePin={togglePin}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
         onKeyDown={handleKeyDown}

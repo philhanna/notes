@@ -534,5 +534,9 @@ overwrite newer data.
 
 ## 15. Open questions
 
-None currently. New implementation questions should be recorded here as they
-are identified.
+- Pinned/recently-viewed shortcut lists are a proposed feature, not yet
+  implemented. See `docs/pinned.md` for the design and its own open
+  questions (notably whether pins should stay device-local or sync via the
+  repository).
+
+New implementation questions should be recorded here as they are identified.

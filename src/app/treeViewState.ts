@@ -1,4 +1,5 @@
 import { encodePointer, resolvePointer } from "../domain/path.ts";
+import { breadcrumbFor, labelFor } from "../domain/search.ts";
 import { getAtPath, listChildren } from "../domain/tree.ts";
 import type {
   JsonObject,
@@ -108,17 +109,60 @@ export function nearestExistingPath(document: JsonObject, path: Path): Path {
   return [];
 }
 
+/**
+ * Drops any pointer that no longer resolves to an existing node — the
+ * validation pinned/recently-viewed entries need (docs/pinned.md 5), unlike
+ * `validateExpandedPaths` below, which additionally requires a container
+ * since only containers can be expanded.
+ */
+export function validatePointerSet(
+  document: JsonObject,
+  pointers: ReadonlySet<string>,
+): Set<string> {
+  const valid = new Set<string>();
+  for (const pointer of pointers) {
+    const path = resolvePointer(document, pointer);
+    if (path !== undefined && getAtPath(document, path) !== undefined) {
+      valid.add(pointer);
+    }
+  }
+  return valid;
+}
+
 export function validateExpandedPaths(
   document: JsonObject,
   expandedPaths: ReadonlySet<string>,
 ): Set<string> {
   const valid = new Set<string>();
-  for (const pointer of expandedPaths) {
-    const path = resolvePointer(document, pointer);
-    const node = path === undefined ? undefined : getAtPath(document, path);
-    if (isContainer(node)) valid.add(pointer);
+  for (const pointer of validatePointerSet(document, expandedPaths)) {
+    const path = resolvePointer(document, pointer)!;
+    if (isContainer(getAtPath(document, path))) valid.add(pointer);
   }
   return valid;
+}
+
+export interface ShortcutEntry {
+  pointer: string;
+  path: Path;
+  label: string;
+  breadcrumb: string;
+}
+
+/** Resolves a pinned/recently-viewed pointer for display (docs/pinned.md 4), or null if it no longer exists. */
+export function describeShortcut(
+  document: JsonObject,
+  pointer: string,
+): ShortcutEntry | null {
+  const path = resolvePointer(document, pointer);
+  if (path === undefined || getAtPath(document, path) === undefined) {
+    return null;
+  }
+  return {
+    pointer,
+    path,
+    label: labelFor(path),
+    breadcrumb: breadcrumbFor(path),
+  };
 }
 
 export function replacePathPrefix(
