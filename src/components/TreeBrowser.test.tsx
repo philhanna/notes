@@ -304,6 +304,23 @@ describe("TreeBrowser", () => {
     expect(row(/^hardinfo, object/)).toBeInTheDocument();
   });
 
+  it("edits a string as plain text and saving it unchanged keeps it unchanged", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const hardinfo = row(/^hardinfo,/);
+
+    for (let round = 0; round < 2; round++) {
+      await openActions(user, hardinfo, "hardinfo");
+      await user.click(within(hardinfo).getByRole("button", { name: "Edit" }));
+      expect(within(hardinfo).getByLabelText("Value")).toHaveValue(
+        "system info",
+      );
+      await user.click(within(hardinfo).getByRole("button", { name: "Save" }));
+    }
+
+    expect(within(hardinfo).getByText("system info")).toBeInTheDocument();
+  });
+
   it("preserves edit drafts in session storage", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -352,9 +369,7 @@ describe("TreeBrowser", () => {
     const viewPanel = hardinfo.querySelector(".tree-row__view") as HTMLElement;
     await user.click(within(viewPanel).getByRole("button", { name: "Edit" }));
 
-    expect(within(hardinfo).getByLabelText("Value")).toHaveValue(
-      '"system info"',
-    );
+    expect(within(hardinfo).getByLabelText("Value")).toHaveValue("system info");
     expect(
       within(hardinfo).queryByText("system info", { selector: "p" }),
     ).not.toBeInTheDocument();

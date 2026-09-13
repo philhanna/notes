@@ -23,3 +23,18 @@ export function inferValue(input: string): InferredValue {
     return { value: input, kind: "string" };
   }
 }
+
+/**
+ * The inverse of inferValue: the text to show when editing an existing
+ * value, chosen so that inferValue(formatValueForEditing(v)) equals v. A
+ * string is shown as its plain, unescaped text unless that text would be
+ * inferred as something else (such as `123`, `true`, or `"quoted"`), in which
+ * case it is shown quoted to keep it a string. Every other value is shown as
+ * JSON.
+ */
+export function formatValueForEditing(value: JsonValue): string {
+  if (typeof value === "string" && inferValue(value).value === value) {
+    return value;
+  }
+  return JSON.stringify(value);
+}

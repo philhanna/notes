@@ -11,6 +11,7 @@ import { exportNode } from "../app/exportDocument.ts";
 import type { MutationError } from "../app/useDocument.ts";
 import type { VisibleTreeNode } from "../app/treeViewState.ts";
 import { pathsEqual } from "../app/treeViewState.ts";
+import { formatValueForEditing } from "../domain/inference.ts";
 import { encodePointer, isPathWithinOrEqual } from "../domain/path.ts";
 import { renderBlock, renderInline } from "../domain/markdown.ts";
 import type { Result } from "../domain/result.ts";
@@ -606,7 +607,7 @@ export function TreeRow({
           <ValueEditor
             idPrefix={`edit-${node.pointer}`}
             storageKey={node.pointer}
-            initialText={JSON.stringify(node.value)}
+            initialText={formatValueForEditing(node.value)}
             submitLabel="Save"
             onSubmit={(value) => void handleValueSubmit(value)}
             onCancel={resetEditor}
